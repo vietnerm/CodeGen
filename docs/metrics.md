@@ -34,6 +34,10 @@ Cùng một pipeline chạy 2 lần liên tiếp, không sửa gì giữa hai l�
   đúng jar (thử nghiệm run 2 — xem commit "ghi state ở bước 8 TRƯỚC lượt layout thứ hai").
 - Thử nghiệm xác nhận: run 4/5 bỏ qua mvn ở bước 5, toàn bộ test HTTP + 75 bước UI + layout 2
   vẫn xanh; `python generator.py changes` báo "không có gì đổi về IR".
+- Bỏ qua mvn ở PostgreSQL là 6s chứ không phải ~0: gồm `install-file` cài devhub-core của lần
+  xanh vào m2 (không compile) để bước 9 mvn lại app không compile vào core cũ của snapshot m2
+  (setup-java chỉ cache m2 theo pom — core cài tay sẽ bị mất giữa các run; lỗi thật
+  run 44727293068). MySQL không có bước 9 nên bỏ qua mvn là 0s.
 
 ## MySQL và số liệu CI
 
@@ -43,5 +47,5 @@ Cùng một pipeline chạy 2 lần liên tiếp, không sửa gì giữa hai l�
 
 | Môi trường | mvn thật (s) | bỏ qua mvn (s) | Ghi chú |
 |---|---|---|---|
-| CI ubuntu-latest · PostgreSQL | 12 | _(chờ run có .cache v3)_ | run 44728532119 · G key = G state = 2d11794c…, tất định |
-| CI ubuntu-latest · MySQL | 12 | _(chờ run có .cache v3)_ | run 44728532119 · sai lệch 2–3s giữa các run là bình thường |
+| CI ubuntu-latest · PostgreSQL | 12 | 6 (kèm cài core vào m2) | run 44728532119 / 44729167927 · G key = G state = 2d11794c…, tất định |
+| CI ubuntu-latest · MySQL | 12 | 0 | như trên · sai lệch 2–3s giữa các run là bình thường |
