@@ -20,7 +20,7 @@ entity:
     type: TEXT
     label: Mã lần bảo dưỡng
     length: 20
-    pattern: ^[BD][A-Z0-9]{4,18}$
+    pattern: ^BD[0-9]{4,18}$
     example: BD0001
     search: eq
   - name: device_id
@@ -41,8 +41,7 @@ entity:
   - name: service_person
     type: TEXT
     label: Người thực hiện
-    length: 200
-    nullable: true
+    length: 100
     example: Nguyễn Văn A
     search: like
   - name: note
