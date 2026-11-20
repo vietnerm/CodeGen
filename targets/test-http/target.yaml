@@ -6,3 +6,4 @@ description: >
   Engine viết tay ở core/tests/http, target chỉ sinh fixtures.json từ IR.
 copy:
   - {from: "repo:core/tests/http", to: tests/http}
+  - {from: "repo:core/tests/ui", to: tests/ui}        # test giao diện Playwright, dùng chung fixtures

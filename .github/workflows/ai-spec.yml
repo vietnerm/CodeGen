@@ -71,6 +71,9 @@ jobs:
       - name: Cài thư viện
         run: pip install -r requirements.txt -r requirements-ci.txt "$(grep -i '^huggingface-hub' requirements-ai.txt)"
 
+      - name: Cài trình duyệt cho test giao diện
+        run: python -m playwright install --with-deps chromium
+
       - name: Cache llama-cpp-python (build portable)
         uses: actions/cache@v4
         with:

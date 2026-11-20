@@ -112,7 +112,10 @@ def run(ir: dict, root: Path, out: Path, log=print) -> dict:
             copies.append((tname, c))
         log(f"  · {tname:14s} {len(files):3d} file")
 
-    for tname, c in copies:                               # copy chạy sau cùng
+    # copy chạy sau cùng: chép từ repo (core/js, custom…) TRƯỚC, rồi mới chép giữa các thư mục out/
+    # — không thì app nhận web/ khi core.js/page.js chưa được chép vào (trang trắng).
+    copies.sort(key=lambda tc: 0 if tc[1]['from'].startswith('repo:') else 1)
+    for tname, c in copies:
         src = (root / c['from'][5:]) if c['from'].startswith('repo:') else (out / c['from'])
         dst = out / c['to']
         if not src.exists():

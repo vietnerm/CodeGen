@@ -64,14 +64,15 @@ async function detailTable(d, rows) {
   const addRow = async (r = {}) => {
     const cells = await Promise.all(d.fields.map(async (f) => h('td', {}, await input(f, r[f.name]))));
     const tr = h('tr', { 'data-detail': d.as }, cells,
-      h('td', {}, h('button', { type: 'button', class: 'btn btn-sm btn-ghost-danger', onclick: () => tr.remove() }, '✕')));
+      h('td', {}, h('button', { type: 'button', class: 'btn btn-sm btn-ghost-danger', 'data-action': 'remove-line',
+        onclick: () => tr.remove() }, '✕')));
     body.append(tr);
   };
   for (const r of rows || []) await addRow(r);
   return h('div', { class: 'col-12' }, h('label', { class: 'form-label mt-2' }, `${d.label} (${d.fid})`),
     h('table', { class: 'table table-sm' },
       h('thead', {}, h('tr', {}, d.fields.map((f) => h('th', {}, f.label + (f.required ? ' *' : ''))), h('th'))), body),
-    h('button', { type: 'button', class: 'btn btn-sm', onclick: () => addRow() }, '+ Thêm dòng'));
+    h('button', { type: 'button', class: 'btn btn-sm', 'data-action': `add-line-${d.as}`, onclick: () => addRow() }, '+ Thêm dòng'));
 }
 
 export async function renderCrudPage(root, api) {
@@ -83,7 +84,7 @@ export async function renderCrudPage(root, api) {
   const formBox = h('div', { class: 'card mt-3', hidden: true });
 
   const show = (e) => {
-    msg.replaceChildren(e ? h('div', { class: 'alert alert-danger' },
+    msg.replaceChildren(e ? h('div', { class: 'alert alert-danger', 'data-error': e.code || '' },
       `${e.code || ''} ${e.message}`, e instanceof ApiError && e.details.length
         ? h('ul', {}, e.details.map((d) => h('li', {}, `${d.field}: ${d.message}`))) : '') : '');
   };
@@ -93,14 +94,14 @@ export async function renderCrudPage(root, api) {
       const r = await api.search({ ...state.filters, page: state.page, size: state.size });
       table.replaceChildren(
         h('thead', {}, h('tr', {}, meta.list.map((n) => h('th', {}, meta.fields.find((f) => f.name === n).label)), h('th'))),
-        h('tbody', {}, r.items.map((row) => h('tr', {},
+        h('tbody', {}, r.items.map((row) => h('tr', { 'data-key': meta.pk.map((k) => row[k]).join('/') },
           meta.list.map((n) => h('td', {}, String(row[n] ?? ''))),
           h('td', { class: 'text-end' },
-            h('button', { class: 'btn btn-sm', onclick: () => edit(row) }, 'Sửa'), ' ',
-            h('button', { class: 'btn btn-sm btn-outline-danger', onclick: () => remove(row) }, 'Xoá'))))));
-      pager.replaceChildren(`Tổng ${r.total} · trang ${r.page + 1}`, h('div', { class: 'ms-auto' },
-        h('button', { class: 'btn btn-sm', disabled: state.page === 0, onclick: () => { state.page--; load(); } }, '‹'),
-        h('button', { class: 'btn btn-sm', disabled: (state.page + 1) * state.size >= r.total,
+            h('button', { class: 'btn btn-sm', 'data-action': 'edit', onclick: () => edit(row) }, 'Sửa'), ' ',
+            h('button', { class: 'btn btn-sm btn-outline-danger', 'data-action': 'delete', onclick: () => remove(row) }, 'Xoá'))))));
+      pager.replaceChildren(h('span', { 'data-total': r.total }, `Tổng ${r.total} · trang ${r.page + 1}`), h('div', { class: 'ms-auto' },
+        h('button', { class: 'btn btn-sm', 'data-action': 'prev', disabled: state.page === 0, onclick: () => { state.page--; load(); } }, '‹'),
+        h('button', { class: 'btn btn-sm', 'data-action': 'next', disabled: (state.page + 1) * state.size >= r.total,
           onclick: () => { state.page++; load(); } }, '›')));
       show(null);
     } catch (e) { show(e); }
@@ -111,9 +112,10 @@ export async function renderCrudPage(root, api) {
       try { row = await api.get(...meta.pk.map((k) => row[k])); } catch (e) { show(e); return; }
     }
     state.editing = row;
-    const form = h('form', { class: 'card-body row g-2' });
+    const form = h('form', { class: 'card-body row g-2', 'data-form': row ? 'edit' : 'create' });
     for (const f of meta.fields) {
-      if (f.system && f.name !== 'row_version') continue;
+      if (f.system || f.name === 'row_version') continue;        // row_version gửi ngầm khi lưu
+      if (!row && f.readonly) continue;                           // cột chỉ đọc (lookup…) chỉ hiện khi sửa
       const ref = (meta.refs || []).find((r) => r.col === f.name);
       const el = await input({ ...f, readonly: f.readonly || (row && meta.pk.includes(f.name)) }, row?.[f.name], ref);
       for (const x of el.matches?.('input,select') ? [el] : el.querySelectorAll('input,select')) x.dataset.main = '1';
@@ -121,8 +123,8 @@ export async function renderCrudPage(root, api) {
     }
     for (const d of meta.details || []) form.append(await detailTable(d, row?.[d.as]));
     form.append(h('div', { class: 'col-12' },
-      h('button', { class: 'btn btn-primary', type: 'submit' }, row ? 'Lưu' : 'Tạo'), ' ',
-      h('button', { class: 'btn', type: 'button', onclick: () => { formBox.hidden = true; } }, 'Đóng')));
+      h('button', { class: 'btn btn-primary', type: 'submit', 'data-action': 'save' }, row ? 'Lưu' : 'Tạo'), ' ',
+      h('button', { class: 'btn', type: 'button', 'data-action': 'close', onclick: () => { formBox.hidden = true; } }, 'Đóng')));
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const body = readForm(form, meta);
@@ -142,13 +144,19 @@ export async function renderCrudPage(root, api) {
     try { await api.remove(...meta.pk.map((k) => row[k]), row.row_version); await load(); } catch (e) { show(e); }
   }
 
-  const search = h('form', { class: 'row g-2 mb-3' },
+  const search = h('form', { class: 'row g-2 mb-3', 'data-form': 'search' },
     await Promise.all(meta.search.map(async (n) => {
       const f = meta.fields.find((x) => x.name === n);
-      return h('div', { class: 'col-md-3' }, await input({ ...f, readonly: false }, ''));
+      const el = await input({ ...f, readonly: false }, '');
+      for (const x of el.matches?.('input,select') ? [el] : el.querySelectorAll('input,select')) {
+        x.setAttribute('placeholder', f.label);
+        x.setAttribute('aria-label', f.label);
+        if (x.tagName === 'SELECT') x.options[0].textContent = `— ${f.label} —`;
+      }
+      return h('div', { class: 'col-md-3' }, el);
     })),
-    h('div', { class: 'col-auto' }, h('button', { class: 'btn', type: 'submit' }, 'Tìm'), ' ',
-      h('button', { class: 'btn btn-primary', type: 'button', onclick: () => edit(null) }, 'Tạo mới')));
+    h('div', { class: 'col-auto' }, h('button', { class: 'btn', type: 'submit', 'data-action': 'search' }, 'Tìm'), ' ',
+      h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'create', onclick: () => edit(null) }, 'Tạo mới')));
   search.addEventListener('submit', (ev) => {
     ev.preventDefault();
     state.filters = Object.fromEntries(meta.search.map((n) => [n, search.elements[n].value || undefined]));
@@ -156,18 +164,18 @@ export async function renderCrudPage(root, api) {
     load();
   });
 
-  root.replaceChildren(h('h2', { class: 'page-title mb-3' }, `${meta.id} · ${meta.name}`), msg, search,
+  root.replaceChildren(h('h2', { class: 'page-title mb-3', 'data-page': meta.id }, `${meta.id} · ${meta.name}`), msg, search,
     h('div', { class: 'card' }, h('div', { class: 'table-responsive' }, table), pager), formBox);
   await load();
 }
 
 /** Ô đăng nhập tối giản cho trang sinh ra. */
 export function renderLogin(root, onDone) {
-  const form = h('form', { class: 'card card-md mx-auto mt-5', style: 'max-width:24rem' },
+  const form = h('form', { class: 'card card-md mx-auto mt-5', style: 'max-width:24rem', 'data-form': 'login' },
     h('div', { class: 'card-body' }, h('h2', { class: 'mb-3' }, 'Đăng nhập'),
       h('input', { class: 'form-control mb-2', name: 'u', placeholder: 'user_id' }),
       h('input', { class: 'form-control mb-2', name: 'p', type: 'password', placeholder: 'password' }),
-      h('button', { class: 'btn btn-primary w-100' }, 'Vào')));
+      h('button', { class: 'btn btn-primary w-100', 'data-action': 'login' }, 'Vào')));
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     try { await core.login(form.elements.u.value, form.elements.p.value); onDone(); } catch (e) { alert(e.message); }
