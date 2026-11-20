@@ -2,9 +2,10 @@
 # (cùng định dạng mà core Java kiểm tra) — không lưu hash tay.
 tenants: [T1, T2]
 
+# grants nhận mã cụ thể hoặc mẫu (ATA0_*) — chức năng mới (kể cả do AI tạo) tự có quyền test
 roles:
-  - {role_id: APP_MAKER,  role_name: Người nhập liệu, grants: {ATA0_0110: RWD, ATA0_0120: RWD, ATA0_0121: RWD}}
-  - {role_id: APP_VIEWER, role_name: Người xem,       grants: {ATA0_0110: R,   ATA0_0120: R,   ATA0_0121: R}}
+  - {role_id: APP_MAKER,  role_name: Người nhập liệu, grants: {'ATA0_*': RWD}}
+  - {role_id: APP_VIEWER, role_name: Người xem,       grants: {'ATA0_*': R}}
 
 users:
   - {user_id: maker1,  user_name: Maker T1,  password: 'Passw0rd!', tenant: T1, units: [HN01, HN02], roles: [APP_MAKER]}
