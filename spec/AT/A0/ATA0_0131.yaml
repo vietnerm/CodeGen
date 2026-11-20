@@ -1,0 +1,83 @@
+# Sinh bởi AI (scripts/ai_spec.py: model trích trường → code ghép spec) — người duyệt
+module: ATA0
+schema: at
+function:
+  id: ATA0_0131
+  name: Lịch bảo dưỡng thiết bị ATM
+  parent: ATA0_0100
+entity:
+  name: atm_service_schedule
+  label: Lịch bảo dưỡng thiết bị ATM
+  pk:
+  - service_id
+  profiles:
+  - tenant
+  - owner_unit
+  - audit
+  - versioned
+  fields:
+  - name: service_id
+    type: TEXT
+    label: Mã lần bảo dưỡng
+    length: 20
+    pattern: ^BD[0-9]{4,18}$
+    example: BD0001
+    search: eq
+  - name: device_id
+    type: TEXT
+    label: Thiết bị
+    length: 20
+    example: ATM0001
+    search: eq
+  - name: service_date
+    type: DATE
+    label: Ngày dự kiến
+    example: '2026-01-15'
+  - name: actual_date
+    type: DATE
+    label: Ngày thực hiện
+    nullable: true
+    example: '2026-01-15'
+  - name: service_person
+    type: TEXT
+    label: Người thực hiện
+    length: 100
+    example: Nguyễn Văn A
+    search: like
+  - name: note
+    type: TEXT
+    label: Ghi chú
+    length: 500
+    nullable: true
+    example: Lịch bảo dưỡng định kỳ
+    search: like
+  - name: status
+    type: TEXT
+    label: Trạng thái
+    length: 1
+    codemap: STATUS_AI
+    enum:
+    - A
+    - I
+    default: A
+    example: A
+actions:
+- SEARCH
+- GET
+- CREATE
+- UPDATE
+- DELETE
+relations:
+- cols:
+  - device_id
+  parent: ATA0_0110
+  on_delete: RESTRICT
+  lookup:
+  - device_name
+hooks:
+- phase: VALIDATE
+  name: validateActualDate
+  actions:
+  - CREATE
+  - UPDATE
+  description: Ngày thực hiện không được trước ngày dự kiến
