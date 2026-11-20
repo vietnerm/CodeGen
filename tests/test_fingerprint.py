@@ -133,3 +133,23 @@ def test_state_quyet_dinh_skip_build(tmp_path):
     fingerprint.state_path(work).write_text(json.dumps(st), encoding='utf-8')
     do, why = fingerprint.skip_build(work)
     assert do and 'y hệt lần xanh' in why
+
+
+def test_g_bo_qua_pycache_duoc_tao_khi_chay(tmp_path):
+    """G tất định giữa các job CI (lỗi thật run 44722931898).
+
+    Trong CI, import codegen tạo codegen/__pycache__/*.pyc TRƯỚC khi g_hash glob;
+    .pyc nhúng mtime file nguồn mà actions/checkout ghi mtime theo giây checkout,
+    nên hai job của cùng một run có pyc khác nhau ⇒ G khác nhau ⇒ key cache mỗi job
+    một loại. G phải bỏ qua pyc/pycache — chúng không phải nguồn sinh code.
+    """
+    work = fresh_copy(tmp_path)
+    g0 = fingerprint.g_hash(work)
+    py = work / 'codegen' / '__pycache__'
+    py.mkdir()
+    (py / 'fingerprint.cpython-312.pyc').write_bytes(b'pyc cua job postgresql')
+    (py / 'model.cpython-312.pyc').write_bytes(b'pyc cua job postgresql 2')
+    assert fingerprint.g_hash(work) == g0
+    # job kia checkout lệch vài giây ⇒ pyc "khác" (mtime nhúng trong header khác)
+    (py / 'fingerprint.cpython-312.pyc').write_bytes(b'pyc cua job mysql - khac byte')
+    assert fingerprint.g_hash(work) == g0

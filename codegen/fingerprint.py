@@ -52,12 +52,24 @@ def _dump(obj) -> str:
 
 # ── G: phần nền ───────────────────────────────────────────────────────────────
 
+def _g_file(p: Path) -> bool:
+    """File nào được tính vào G: bỏ __pycache__/*.pyc.
+
+    Vì sao: import codegen (khi chạy generator.py) tự tạo __pycache__ TRƯỚC khi g_hash glob;
+    .pyc nhúng mtime file nguồn, mà actions/checkout ghi mtime theo giây checkout — hai job
+    cùng một run checkout lệch nhau vài giây là G khác nhau (run 44722931898: postgresql
+    5ecb81de… khác mysql 9081a0da…). pyc không phải nguồn sinh code — loại ra, G chỉ còn
+    nội dung git, tất định giữa các job.
+    """
+    return p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'
+
+
 def g_hash(root: Path) -> str:
     """sha256 trên (đường dẫn + nội dung) của mọi file khớp G_GLOBS, sắp xếp ổn định."""
     root = Path(root)
     files: list[Path] = []
     for pat in G_GLOBS:
-        files += [p for p in root.glob(pat) if p.is_file()]
+        files += [p for p in root.glob(pat) if _g_file(p)]
     h = hashlib.sha256()
     h.update(FORMAT.encode())
     for pat in G_GLOBS:                       # đổi danh sách mẫu ⇒ G đổi
