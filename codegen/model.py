@@ -380,20 +380,58 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
             seen_h = set()
             for h in item['hooks']:
                 hw = f"{w} hook {h.get('name')}"
-                if h.get('phase') not in PHASES:
+                phase = h.get('phase') or 'VALIDATE'          # hook mô tả luật bằng rule thì không cần phase
+                if phase not in PHASES:
                     rep.err(hw, f"phase phải thuộc {sorted(PHASES)}")
                 if not RE_HOOK.match(str(h.get('name', ''))):
                     rep.err(hw, "name phải camelCase, vd validateDevice")
                 if h.get('name') in seen_h:
                     rep.err(hw, "trùng tên hook")
                 seen_h.add(h.get('name'))
-                acts = h.get('actions') or ['CREATE', 'UPDATE']
+                if h.get('actions') and h.get('on'):
+                    rep.err(hw, "chỉ dùng một trong hai actions / on")
+                acts = h.get('actions') or h.get('on') or ['CREATE', 'UPDATE']
+                if isinstance(acts, str):
+                    acts = [acts]
+                acts = [str(a).upper() for a in acts]         # on: [create, update] ≡ actions: [CREATE, UPDATE]
                 bad = [a for a in acts if a not in ('CREATE', 'UPDATE', 'DELETE')]
                 if bad:
                     rep.err(hw, f"hook chỉ gắn CREATE/UPDATE/DELETE: {bad}")
-                fn['hooks'].append({'phase': h.get('phase'), 'name': h.get('name'),
+                rule = h.get('rule')
+                if rule is not None and (not isinstance(rule, str) or len(rule.strip()) < 5):
+                    rep.err(hw, "rule phải là văn bản mô tả luật nghiệp vụ")
+                fn['hooks'].append({'phase': phase, 'name': h.get('name'),
                                     'n': names(re.sub(r'(?<!^)([A-Z])', r'_\1', str(h.get('name'))).lower()),
-                                    'actions': acts, 'description': h.get('description', '')})
+                                    'actions': acts, 'description': h.get('description') or rule or '',
+                                    'rule': rule})
+                # ví dụ test của hook → sinh test HTTP tất định (engine run_all.py chạy qua IR)
+                fnames = {f['name'] for f in ent['fields']}
+                for t in h.get('tests') or []:
+                    tw = f"{hw} test"
+                    inp = t.get('input') if isinstance(t, dict) else None
+                    if not isinstance(inp, dict) or not inp:
+                        rep.err(tw, "cần input: {field: giá trị}")
+                        continue
+                    unknown = [k for k in inp if k not in fnames]
+                    if unknown:
+                        rep.err(tw, f"input có cột không tồn tại: {unknown}")
+                        continue
+                    err, okc = t.get('error'), t.get('ok')
+                    if bool(err) == bool(okc):
+                        rep.err(tw, "mỗi test cần đúng một trong hai: error: {field, code} | ok: true")
+                        continue
+                    act = 'CREATE' if 'CREATE' in acts else (acts[0] if acts else 'CREATE')
+                    if err:
+                        if (not isinstance(err, dict) or err.get('field') not in fnames
+                                or not isinstance(err.get('code'), str) or not err['code'].strip()):
+                            rep.err(tw, f"error cần {{field, code}} với field thuộc bảng: {err!r}")
+                            continue
+                        exp = {'status': 400, 'field': err['field'], 'code': err['code']}
+                        label = f"hook {h.get('name')}: {', '.join(f'{k}={v}' for k, v in inp.items())} → {err['field']} {err['code']}"
+                    else:
+                        exp = {'status': 201 if act == 'CREATE' else 200}
+                        label = f"hook {h.get('name')}: input hợp lệ được chấp nhận ({act})"
+                    fn['tests'].append({'name': label, 'action': act, 'patch': dict(inp), 'expect': exp})
         fn_by_id[fid] = fn
     for fn in fn_by_id.values():
         if fn['parent'] and fn['parent'] not in fn_by_id:
