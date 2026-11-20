@@ -1,0 +1,27 @@
+# SINH TỰ ĐỘNG bởi CodeGen — cấu hình qua biến môi trường
+server:
+  port: ${PORT:8080}
+spring:
+  application:
+    name: {{ project.name }}
+  jackson:
+    property-naming-strategy: SNAKE_CASE      # JSON snake_case = tên cột = OpenAPI
+    default-property-inclusion: always
+    serialization:
+      write-dates-as-timestamps: false
+flowsql:
+  datasources:
+    main:
+      type: ${DB_TYPE:postgresql}             # postgresql | mysql — catalog SQL tự chọn theo type
+      host: ${DB_HOST:localhost}
+      port: ${DB_PORT:5432}
+      database: ${DB_NAME:app}
+      username: ${DB_USER:app}
+      password: ${DB_PASS:app}
+      max-pool-size: ${DB_POOL:10}
+      slow-query-ms: 500
+app:
+  datasource: main
+  jwt:
+    secret: ${APP_JWT_SECRET}
+    ttl-seconds: ${APP_JWT_TTL:3600}

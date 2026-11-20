@@ -1,0 +1,8 @@
+name: test-http
+kind: shared
+ir_versions: ["1."]
+description: >
+  Bộ test HTTP hộp đen (Python stdlib) — chạy giống hệt với MỌI backend (Java, C++…).
+  Engine viết tay ở core/tests/http, target chỉ sinh fixtures.json từ IR.
+copy:
+  - {from: "repo:core/tests/http", to: tests/http}

@@ -1,0 +1,31 @@
+{% import '_macros.j2' as m with context %}
+// Sinh 1 lần bởi CodeGen, SAU ĐÓ do người/AI viết. Generator không ghi đè file này.
+// Chỉ dùng API của vn.io.devhub.core (Ctx, Errors, Sql, Codemap…) — guard chặn java.sql/java.net/flowsql.
+package {{ m.pkg(fn, 'mod') }};
+
+import org.springframework.stereotype.Component;
+import vn.io.devhub.core.Ctx;
+import vn.io.devhub.core.Errors;
+
+@Component
+public class {{ fn.id }}_hookImpl implements {{ fn.id }}_hook {
+{% for h in fn.hooks %}
+
+    /** {{ h.phase }} · {{ h.actions | join(', ') }} — {{ h.description }} */
+    @Override
+{% if h.phase == 'VALIDATE' %}
+    public void {{ h.name }}(Ctx ctx, String action, {{ fn.id }}_dto dto, Errors errors) {
+        // TODO: {{ h.description }}
+    }
+{% elif h.phase == 'BEFORE_SAVE' %}
+    public {{ fn.id }}_dto {{ h.name }}(Ctx ctx, String action, {{ fn.id }}_dto dto) {
+        // TODO: {{ h.description }}
+        return dto;
+    }
+{% else %}
+    public void {{ h.name }}(Ctx ctx, String action, {{ fn.id }}_dto dto) {
+        // TODO: {{ h.description }}
+    }
+{% endif %}
+{% endfor %}
+}

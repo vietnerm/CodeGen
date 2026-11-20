@@ -1,0 +1,58 @@
+# {{ fn.id }} — {{ fn.name }}
+
+{{ fn.description }}
+
+- Module `{{ fn.module }}` · backend `{{ fn.target }}` · cha `{{ fn.parent or '-' }}`
+- API gốc: `{{ fn.api_base }}` · trang: `{{ fn.url }}` · OpenAPI: `openapi/{{ fn.id }}.yaml`
+- Bảng: `{{ ent.table }}` · PK ({{ ent.pk | join(', ') }}){% if ent.tenant %} · lọc theo tenant{% endif %}{% if ent.owner_unit %} · lọc theo đơn vị (`owner_unit` ∈ đơn vị trong token){% endif %}
+
+## Endpoint
+
+| Action | Method | Path | Quyền |
+|---|---|---|---|
+{% for a in fn.actions %}
+| {{ a.code }} | {{ a.method }} | `{{ a.path }}` | {{ a.right }} |
+{% endfor %}
+
+## Trường
+
+| Trường | Kiểu | Bắt buộc | Ràng buộc | Ví dụ | Nhãn |
+|---|---|---|---|---|---|
+{% for f in ent.api_fields %}
+| `{{ f.name }}` | {{ f.type }}{% if f.length %}({{ f.length }}){% endif %} | {{ '✓' if f.required else ('chỉ đọc' if f.readonly else '') }} | {% if f.enum %}{{ f.enum | join('/') }} {% endif %}{% if f.codemap %}codemap `{{ f.codemap }}` {% endif %}{% if f.pattern %}`{{ f.pattern }}` {% endif %}{% if f.min is not none %}≥{{ f.min }}{% endif %} | {{ f.example if f.example is not none else '' }} | {{ f.label }} |
+{% endfor %}
+
+{% if fn.refs %}
+## Tham chiếu (kiểm tra khi lưu — không FK)
+
+{% for r in fn.refs %}
+- `{{ r.cols | join(', ') }}` → `{{ r.parent }}`{% if r.parent_function %} ({{ r.parent_function }}){% endif %}: không có ⇒ 400 `REFERENCE`
+{% endfor %}
+{% endif %}
+{% if fn.children %}
+## Khi xoá
+
+{% for r in fn.children %}
+- `{{ r.child }}` ({{ r.cols | join(', ') }}): **{{ r.on_delete }}**{% if r.on_delete == 'RESTRICT' %} — còn dữ liệu con ⇒ 409 `E_RESTRICT`{% endif %}
+
+{% endfor %}
+{% endif %}
+## Hook nghiệp vụ (viết tay trong `custom/`)
+
+{% for h in fn.hooks %}
+- `{{ h.phase }}` · `{{ h.name }}` · action {{ h.actions | join(', ') }} — {{ h.description }}
+{% else %}
+- (không có)
+{% endfor %}
+
+Engine/code sinh đã lo, hook KHÔNG làm lại: xác thực + quyền theo action, tenant/đơn vị,
+bắt buộc/độ dài/pattern/enum/khoảng/CODEMAP, tham chiếu, khoá lạc quan, RESTRICT/CASCADE, audit.
+
+## Ví dụ
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/token -H 'Content-Type: application/json' \
+  -d '{"user_id":"maker1","password":"Passw0rd!"}' | jq -r .access_token)
+curl -s -X POST localhost:8080{{ fn.api_base }} -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{{ ent.example | tojson }}'
+```

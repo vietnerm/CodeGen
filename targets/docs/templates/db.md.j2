@@ -1,0 +1,26 @@
+# Mô hình dữ liệu
+
+Không dùng FOREIGN KEY. Quan hệ được khai báo trong spec; core/code sinh ra kiểm tra tồn tại
+khi lưu, RESTRICT/CASCADE khi xoá, và `sql/<dialect>/99_integrity.sql` dò dữ liệu mồ côi.
+
+{% for e in ir.entities %}
+## `{{ e.table }}` — {{ e.label }}{% if e.core %} (core){% else %} ({{ e.function }}){% endif %}
+
+{% if e.description %}{{ e.description }}
+
+{% endif %}
+PK ({{ e.physical_pk | join(', ') }}){% if e.tenant %} · theo tenant{% endif %}{% if e.owner_unit %} · phạm vi đơn vị{% endif %}{% if e.versioned %} · khoá lạc quan{% endif %}
+
+| Cột | Kiểu | Null | Ràng buộc | Nhãn |
+|---|---|---|---|---|
+{% for f in e.fields %}
+| {{ f.name }} | {{ f.type }}{% if f.length %}({{ f.length }}){% endif %}{% if f.precision %}({{ f.precision }},{{ f.scale }}){% endif %} | {{ '✓' if f.nullable else '' }} | {% if f.enum %}enum {{ f.enum | join('/') }} {% endif %}{% if f.codemap %}codemap {{ f.codemap }} {% endif %}{% if f.pattern %}`{{ f.pattern }}` {% endif %}{% if f.min is not none %}≥{{ f.min }} {% endif %}{% if f.max is not none %}≤{{ f.max }}{% endif %}{% if f.default is not none %} default {{ f.default }}{% endif %} | {{ f.label }} |
+{% endfor %}
+{% set rels = ir.relations | selectattr('child', 'equalto', e.id) | list %}
+{% if rels %}
+
+Tham chiếu: {% for r in rels %}({{ r.cols | join(', ') }}) → `{{ r.parent }}` [xoá cha: {{ r.on_delete }}]{% if not loop.last %}; {% endif %}{% endfor %}
+
+{% endif %}
+
+{% endfor %}

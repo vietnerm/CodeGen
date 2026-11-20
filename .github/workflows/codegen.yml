@@ -1,0 +1,86 @@
+# Pipeline hằng ngày + mỗi push/PR: spec → sinh → guard → DB → SQL → build → app → test HTTP.
+# Chạy trên cả PostgreSQL và MySQL: cùng spec, cùng code, cùng bộ test.
+name: codegen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 19 * * *"          # 02:17 giờ Việt Nam mỗi ngày
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codegen-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [postgresql, mysql]
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env: {MYSQL_ROOT_PASSWORD: app, MYSQL_DATABASE: app}
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -papp" --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      DB_TYPE: ${{ matrix.db }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: ${{ matrix.db == 'postgresql' && '5432' || '3306' }}
+      DB_NAME: app
+      DB_USER: ${{ matrix.db == 'postgresql' && 'app' || 'root' }}
+      DB_PASS: app
+      APP_JWT_SECRET: ci-only-secret-not-for-production-0123456789
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Cài thư viện Python
+        run: pip install -r requirements.txt -r requirements-ci.txt
+
+      - name: Guard PR do AI tạo (nhánh ai/*)
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'ai/')
+        run: GUARD_BASE=origin/${{ github.base_ref }} python scripts/guard.py
+
+      - name: Pipeline (${{ matrix.db }})
+        run: bash scripts/pipeline.sh
+
+      - name: Lưu kết quả
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codegen-${{ matrix.db }}
+          path: |
+            out/openapi/
+            out/docs/
+            out/logs/
+            out/app/target/app.jar
+          if-no-files-found: warn

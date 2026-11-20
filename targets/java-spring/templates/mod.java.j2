@@ -1,0 +1,214 @@
+{% import '_macros.j2' as m with context %}
+{% set D = fn.id ~ '_dto' %}
+{% set camel = {} %}{% for f in ent.fields %}{% set _ = camel.update({f.name: f.n.camel}) %}{% endfor %}
+{% set pk_args = ent.pk_fields | map(attribute='n.camel') | join(', ') %}
+{% set pk_decl %}{% for f in ent.pk_fields %}{{ f | ftype }} {{ f.n.camel }}{{ ', ' if not loop.last }}{% endfor %}{% endset %}
+{% set pk_of_d %}{% for f in ent.pk_fields %}d.{{ f.n.camel }}(){{ ', ' if not loop.last }}{% endfor %}{% endset %}
+{% set pk_of_s %}{% for f in ent.pk_fields %}s.{{ f.n.camel }}(){{ ', ' if not loop.last }}{% endfor %}{% endset %}
+// SINH TỰ ĐỘNG bởi CodeGen từ spec/{{ fn.sys }}/{{ fn.sub }}/{{ fn.id }}.yaml — KHÔNG SỬA TAY
+package {{ m.pkg(fn, 'mod') }};
+
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.regex.Pattern;
+import org.springframework.stereotype.Service;
+import vn.io.devhub.core.*;
+
+/** {{ fn.id }} — {{ fn.name }}: nghiệp vụ CRUD chuẩn. Luật riêng viết trong {{ fn.id }}_hookImpl. */
+@Service
+public class {{ fn.id }}_mod {
+    public static final String FID = "{{ fn.id }}";
+{% for f in ent.fields if f.pattern %}
+    private static final Pattern P_{{ f.n.upper }} = Pattern.compile({{ f.pattern | jstr }});
+{% endfor %}
+{% for f in ent.fields if f.enum and not f.system %}
+    private static final Set<String> E_{{ f.n.upper }} = Set.of({% for x in f.enum %}{{ x | jstr }}{{ ', ' if not loop.last }}{% endfor %});
+{% endfor %}
+
+    private final Sql sql;
+    private final Codemap codemap;
+    private final Audit audit;
+    private final {{ fn.id }}_hook hook;
+
+    public {{ fn.id }}_mod(Sql sql, Codemap codemap, Audit audit, {{ fn.id }}_hook hook) {
+        this.sql = sql;
+        this.codemap = codemap;
+        this.audit = audit;
+        this.hook = hook;
+    }
+
+    public Page<{{ D }}> search(Ctx ctx, PageQuery q) {
+        return sql.page(ctx, FID, q).map({{ D }}::of);
+    }
+
+    public {{ D }} get(Ctx ctx, {{ pk_decl }}) {
+        return sql.one(ctx, FID + ".get", keyParams({{ pk_args }})).map({{ D }}::of)
+                .orElseThrow(() -> ApiException.notFound("Không có {{ ent.label }} " + {% for f in ent.pk_fields %}{{ f.n.camel }}{{ ' + "/" + ' if not loop.last }}{% endfor %}));
+    }
+
+    public {{ D }} create(Ctx ctx, {{ D }} in) {
+        if (in == null) throw ApiException.badRequest("Thiếu dữ liệu");
+        {{ D }} d = defaults(ctx, in);
+        Errors errors = new Errors();
+        validate(ctx, "CREATE", d, errors);
+{% for h in fn.hooks if h.phase == 'VALIDATE' and 'CREATE' in h.actions %}
+        if (errors.isEmpty()) hook.{{ h.name }}(ctx, "CREATE", d, errors);
+{% endfor %}
+        errors.throwIfAny();
+{% if ent.owner_unit %}
+        checkScope(ctx, d.ownerUnit());
+{% endif %}
+        return sql.tx(() -> {
+            if (sql.count(ctx, FID + ".exists", keyParams({{ pk_of_d }})) > 0)
+                throw ApiException.duplicate("{{ ent.label }} " + d.key() + " đã tồn tại");
+            {{ D }} s = d;
+{% for h in fn.hooks if h.phase == 'BEFORE_SAVE' and 'CREATE' in h.actions %}
+            s = hook.{{ h.name }}(ctx, "CREATE", s);
+{% endfor %}
+            sql.exec(ctx, FID + ".insert", params(s));
+            {{ D }} saved = get(ctx, {{ pk_of_s }});
+{% for h in fn.hooks if h.phase == 'AFTER_SAVE' and 'CREATE' in h.actions %}
+            hook.{{ h.name }}(ctx, "CREATE", saved);
+{% endfor %}
+            audit.write(ctx, FID, "CREATE", saved.key(), Map.of());
+            return saved;
+        });
+    }
+
+    public {{ D }} update(Ctx ctx, {{ pk_decl }}, {{ D }} in) {
+        if (in == null) throw ApiException.badRequest("Thiếu dữ liệu");
+        {{ D }} d = defaults(ctx, in.withKey({{ pk_args }}));
+        Errors errors = new Errors();
+        validate(ctx, "UPDATE", d, errors);
+{% if ent.versioned %}
+        if (d.rowVersion() == null) errors.add("row_version", "REQUIRED", "Cần row_version hiện tại");
+{% endif %}
+{% for h in fn.hooks if h.phase == 'VALIDATE' and 'UPDATE' in h.actions %}
+        if (errors.isEmpty()) hook.{{ h.name }}(ctx, "UPDATE", d, errors);
+{% endfor %}
+        errors.throwIfAny();
+{% if ent.owner_unit %}
+        checkScope(ctx, d.ownerUnit());
+{% endif %}
+        return sql.tx(() -> {
+            {{ D }} s = d;
+{% for h in fn.hooks if h.phase == 'BEFORE_SAVE' and 'UPDATE' in h.actions %}
+            s = hook.{{ h.name }}(ctx, "UPDATE", s);
+{% endfor %}
+            if (sql.exec(ctx, FID + ".update", params(s)) == 0) {
+                get(ctx, {{ pk_args }});                                  // 404 nếu không thấy / ngoài phạm vi
+                throw ApiException.conflict("Dữ liệu đã bị người khác thay đổi (row_version cũ) — tải lại rồi sửa");
+            }
+            {{ D }} saved = get(ctx, {{ pk_args }});
+{% for h in fn.hooks if h.phase == 'AFTER_SAVE' and 'UPDATE' in h.actions %}
+            hook.{{ h.name }}(ctx, "UPDATE", saved);
+{% endfor %}
+            audit.write(ctx, FID, "UPDATE", saved.key(), Map.of("row_version", s.rowVersion()));
+            return saved;
+        });
+    }
+
+    public void delete(Ctx ctx, {{ pk_decl }}{% if ent.versioned %}, Long rowVersion{% endif %}) {
+{% if ent.versioned %}
+        if (rowVersion == null) new Errors().add("row_version", "REQUIRED", "Cần row_version hiện tại").throwIfAny();
+{% endif %}
+        sql.tx(() -> {
+            {{ D }} cur = get(ctx, {{ pk_args }});
+{% for h in fn.hooks if h.phase == 'VALIDATE' and 'DELETE' in h.actions %}
+            Errors errors = new Errors();
+            hook.{{ h.name }}(ctx, "DELETE", cur, errors);
+            errors.throwIfAny();
+{% endfor %}
+            List<ApiException.Detail> blockers = new ArrayList<>();
+{% for r in fn.children if r.on_delete == 'RESTRICT' %}
+            long n{{ loop.index }} = sql.count(ctx, FID + ".children.{{ r.slug }}", keyParams({{ pk_args }}));
+            if (n{{ loop.index }} > 0)
+                blockers.add(new ApiException.Detail("{{ r.child }}", "RESTRICT", "{{ ents[r.child].label }}: " + n{{ loop.index }} + " bản ghi"));
+{% endfor %}
+            if (!blockers.isEmpty()) throw ApiException.restrict("Còn dữ liệu liên quan — không xoá được", blockers);
+{% for r in fn.children if r.on_delete == 'CASCADE' %}
+            sql.exec(ctx, FID + ".cascade.{{ r.slug }}", keyParams({{ pk_args }}));
+{% endfor %}
+{% for r in fn.children if r.on_delete == 'NULLIFY' %}
+            sql.exec(ctx, FID + ".nullify.{{ r.slug }}", keyParams({{ pk_args }}));
+{% endfor %}
+            Map<String, Object> p = keyParams({{ pk_args }});
+{% if ent.versioned %}
+            p.put("row_version", rowVersion);
+{% endif %}
+            if (sql.exec(ctx, FID + ".delete", p) == 0)
+                throw ApiException.conflict("Dữ liệu đã bị người khác thay đổi (row_version cũ) — tải lại rồi xoá");
+            audit.write(ctx, FID, "DELETE", cur.key(), Map.of());
+        });
+    }
+
+    // ─────────────────────────── luật sinh từ spec ───────────────────────────
+    private void validate(Ctx ctx, String action, {{ D }} d, Errors errors) {
+{% for f in ent.api_fields if not f.readonly %}
+        {
+            var v = d.{{ f.n.camel }}();
+{% if f.required %}
+            if (v == null{% if f.type == 'TEXT' %} || v.isBlank(){% endif %}) errors.add("{{ f.name }}", "REQUIRED", "{{ f.label }} bắt buộc");
+{% endif %}
+{% if f.type == 'TEXT' and f.length %}
+            if (v != null && v.length() > {{ f.length }}) errors.add("{{ f.name }}", "LENGTH", "{{ f.label }} tối đa {{ f.length }} ký tự");
+{% endif %}
+{% if f.pattern %}
+            if (v != null && !P_{{ f.n.upper }}.matcher(v).matches()) errors.add("{{ f.name }}", "PATTERN", "{{ f.label }} sai định dạng");
+{% endif %}
+{% if f.enum %}
+            if (v != null && !E_{{ f.n.upper }}.contains(v)) errors.add("{{ f.name }}", "ENUM", "{{ f.label }} phải thuộc {{ f.enum | join('/') }}");
+{% endif %}
+{% for bound, op, word in [(f.min, '<', 'nhỏ nhất'), (f.max, '>', 'lớn nhất')] if bound is not none %}
+{% if f.type == 'DECIMAL' %}
+            if (v != null && v.compareTo({{ m.jnum(f, bound) }}) {{ op }} 0) errors.add("{{ f.name }}", "RANGE", "{{ f.label }} {{ word }} {{ bound }}");
+{% else %}
+            if (v != null && v {{ op }} {{ m.jnum(f, bound) }}) errors.add("{{ f.name }}", "RANGE", "{{ f.label }} {{ word }} {{ bound }}");
+{% endif %}
+{% endfor %}
+{% if f.codemap %}
+            if (v != null && !errors.has("{{ f.name }}") && !codemap.exists(ctx, "{{ f.codemap }}", v))
+                errors.add("{{ f.name }}", "CODEMAP", "{{ f.label }}: mã " + v + " không có trong {{ f.codemap }}");
+{% endif %}
+        }
+{% endfor %}
+{% for r in fn.refs %}
+        if ({% for c in r.cols %}d.{{ camel[c] }}() != null && !errors.has("{{ c }}"){{ ' && ' if not loop.last }}{% endfor %}
+
+                && sql.count(ctx, FID + ".ref.{{ r.slug }}", P.of({% for c in r.cols %}"{{ c }}", d.{{ camel[c] }}(){{ ', ' if not loop.last }}{% endfor %})) == 0)
+            errors.add("{{ r.cols[0] }}", "REFERENCE", "{{ r.label }} không tồn tại");
+{% endfor %}
+    }
+
+    private {{ D }} defaults(Ctx ctx, {{ D }} in) {
+        return new {{ D }}(
+{% for f in ent.api_fields %}
+{% if f.name == 'owner_unit' %}
+                in.ownerUnit() != null ? in.ownerUnit() : ctx.primaryUnit(){{ ',' if not loop.last }}
+{% elif f.default is not none and not f.system %}
+                in.{{ f.n.camel }}() != null ? in.{{ f.n.camel }}() : {{ m.jdefault(f) }}{{ ',' if not loop.last }}
+{% else %}
+                in.{{ f.n.camel }}(){{ ',' if not loop.last }}
+{% endif %}
+{% endfor %}
+        );
+    }
+{% if ent.owner_unit %}
+
+    private static void checkScope(Ctx ctx, String unit) {
+        if (!ctx.hasUnit(unit)) throw ApiException.scope("Không có quyền trên đơn vị " + unit);
+    }
+{% endif %}
+
+    private static Map<String, Object> keyParams({{ pk_decl }}) {
+        return P.of({% for f in ent.pk_fields %}"{{ f.name }}", {{ f.n.camel }}{{ ', ' if not loop.last }}{% endfor %});
+    }
+
+    private static Map<String, Object> params({{ D }} s) {
+        Map<String, Object> p = new HashMap<>();
+{% for f in ent.api_fields if not f.readonly or f.name == 'row_version' %}
+        p.put("{{ f.name }}", s.{{ f.n.camel }}());
+{% endfor %}
+        return p;
+    }
+}

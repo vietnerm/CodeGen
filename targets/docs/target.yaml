@@ -1,0 +1,8 @@
+name: docs
+kind: shared
+ir_versions: ["1."]
+description: Tài liệu Markdown cho người và agent (mỗi function 1 file + mô tả DB)
+outputs:
+  - {template: index.md.j2, path: docs/index.md, scope: project}
+  - {template: db.md.j2, path: docs/db.md, scope: project}
+  - {template: function.md.j2, path: "docs/{fid}.md", scope: function}

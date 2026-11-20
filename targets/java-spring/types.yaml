@@ -1,0 +1,18 @@
+fields:
+  TEXT: String
+  INT: Integer
+  BIGINT: Long
+  DECIMAL: java.math.BigDecimal
+  DATE: java.time.LocalDate
+  TIMESTAMP: java.time.OffsetDateTime
+  BOOL: Boolean
+  JSON: String
+conv:            # đọc từ row FlowSQL
+  TEXT: str
+  INT: integer
+  BIGINT: lng
+  DECIMAL: dec
+  DATE: date
+  TIMESTAMP: ts
+  BOOL: bool
+  JSON: str

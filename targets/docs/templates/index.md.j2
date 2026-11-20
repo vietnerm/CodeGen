@@ -1,0 +1,17 @@
+# {{ project.title }} — tài liệu API
+
+Sinh tự động từ `spec/` (IR {{ ir.ir_version }}). Không sửa tay.
+
+- OpenAPI gộp: `openapi/openapi.yaml` (app phục vụ tại `/openapi/openapi.yaml`)
+- Mô hình dữ liệu: [db.md](db.md)
+- Xác thực: `POST /api/v1/auth/token` → `Authorization: Bearer <token>`
+- Quyền: mỗi action yêu cầu 1 bit trên function — R=1 (xem) · W=2 (tạo/sửa) · D=4 (xoá) · X=8 (thực thi/duyệt)
+- Lỗi: `{"code", "message", "details":[{"field","code","message"}]}` — xem bảng mã trong OpenAPI
+
+## Chức năng
+
+| Mã | Tên | API | Trang |
+|---|---|---|---|
+{% for f in ir.functions %}
+| {{ f.id }} | {{ '&nbsp;&nbsp;' * f.level }}{{ f.name }} | {% if f.entity %}[`{{ f.api_base }}`]({{ f.id }}.md){% else %}menu{% endif %} | {{ f.url or '-' }} |
+{% endfor %}

@@ -1,0 +1,83 @@
+{% import '_macros.j2' as m with context %}
+{% set D = fn.id ~ '_dto' %}
+// SINH TỰ ĐỘNG bởi CodeGen — KHÔNG SỬA TAY
+package {{ m.pkg(fn, 'trx') }};
+
+import java.util.HashMap;
+import java.util.Map;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import vn.io.devhub.core.Auth;
+import vn.io.devhub.core.Ctx;
+import vn.io.devhub.core.Page;
+import vn.io.devhub.core.PageQuery;
+import {{ m.pkg(fn, 'mod') }}.{{ D }};
+import {{ m.pkg(fn, 'mod') }}.{{ fn.id }}_mod;
+
+/** {{ fn.id }} — {{ fn.name }}. HTTP + kiểm quyền; nghiệp vụ ở {{ fn.id }}_mod. */
+@RestController
+@RequestMapping("{{ fn.api_base }}")
+public class {{ fn.id }}_trx {
+    private static final String FID = "{{ fn.id }}";
+    private final Auth auth;
+    private final {{ fn.id }}_mod mod;
+
+    public {{ fn.id }}_trx(Auth auth, {{ fn.id }}_mod mod) {
+        this.auth = auth;
+        this.mod = mod;
+    }
+{% set pkvars %}{% for f in ent.pk_fields %}@PathVariable("{{ f.name }}") {{ f | ftype }} {{ f.n.camel }}{{ ', ' if not loop.last }}{% endfor %}{% endset %}
+{% set pkargs = ent.pk_fields | map(attribute='n.camel') | join(', ') %}
+{% set pkpath %}{% for c in ent.pk %}/{{ '{' }}{{ c }}{{ '}' }}{% endfor %}{% endset %}
+{% for a in fn.actions %}
+{% if a.code == 'SEARCH' %}
+
+    @GetMapping
+    public Page<{{ D }}> search(@RequestHeader(value = "Authorization", required = false) String authz,
+                                @RequestParam(value = "page", defaultValue = "0") int page,
+                                @RequestParam(value = "size", defaultValue = "20") int size,
+                                @RequestParam(value = "sort", required = false) String sort,
+                                @RequestParam(value = "dir", defaultValue = "asc") String dir{% for f in ent.search_fields %},
+                                @RequestParam(value = "{{ f.name }}", required = false) String {{ f.n.camel }}{% endfor %}) {
+        Ctx ctx = auth.require(authz, FID, '{{ a.right }}');
+        Map<String, Object> filters = new HashMap<>();
+{% for f in ent.search_fields %}
+        filters.put("{{ f.name }}", {{ f.n.camel }});
+{% endfor %}
+        return mod.search(ctx, new PageQuery(page, size, sort, dir, filters));
+    }
+{% elif a.code == 'GET' %}
+
+    @GetMapping("{{ pkpath }}")
+    public {{ D }} get(@RequestHeader(value = "Authorization", required = false) String authz, {{ pkvars }}) {
+        Ctx ctx = auth.require(authz, FID, '{{ a.right }}');
+        return mod.get(ctx, {{ pkargs }});
+    }
+{% elif a.code == 'CREATE' %}
+
+    @PostMapping
+    public ResponseEntity<{{ D }}> create(@RequestHeader(value = "Authorization", required = false) String authz,
+                                         @RequestBody(required = false) {{ D }} body) {
+        Ctx ctx = auth.require(authz, FID, '{{ a.right }}');
+        return ResponseEntity.status(201).body(mod.create(ctx, body));
+    }
+{% elif a.code == 'UPDATE' %}
+
+    @PutMapping("{{ pkpath }}")
+    public {{ D }} update(@RequestHeader(value = "Authorization", required = false) String authz, {{ pkvars }},
+                         @RequestBody(required = false) {{ D }} body) {
+        Ctx ctx = auth.require(authz, FID, '{{ a.right }}');
+        return mod.update(ctx, {{ pkargs }}, body);
+    }
+{% elif a.code == 'DELETE' %}
+
+    @DeleteMapping("{{ pkpath }}")
+    public ResponseEntity<Void> delete(@RequestHeader(value = "Authorization", required = false) String authz, {{ pkvars }}{% if ent.versioned %},
+                                       @RequestParam(value = "row_version", required = false) Long rowVersion{% endif %}) {
+        Ctx ctx = auth.require(authz, FID, '{{ a.right }}');
+        mod.delete(ctx, {{ pkargs }}{% if ent.versioned %}, rowVersion{% endif %});
+        return ResponseEntity.noContent().build();
+    }
+{% endif %}
+{% endfor %}
+}

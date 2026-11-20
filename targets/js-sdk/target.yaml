@@ -1,0 +1,14 @@
+name: js-sdk
+kind: shared
+ir_versions: ["1."]
+description: >
+  JS SDK sinh từ IR: mỗi function 1 module api/<FID>.js gọi qua core.js (không fetch trực tiếp).
+  Agent lớn/giao diện riêng dùng module này thay vì tự gọi HTTP.
+outputs:
+  - {template: api.js.j2,   path: "web/js/api/{fid}.js", scope: function}
+  - {template: codes.js.j2, path: web/js/codes.js, scope: codemap}
+  - {template: index.js.j2, path: web/js/index.js, scope: project}
+copy:
+  - {from: "repo:core/js", to: web/js}
+editable_globs: []
+forbidden_calls: [fetch, XMLHttpRequest, axios]

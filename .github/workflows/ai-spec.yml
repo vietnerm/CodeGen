@@ -1,0 +1,64 @@
+# AI nhỏ viết SPEC (không viết code): mô tả tiếng Việt → spec YAML ép đúng JSON schema
+# → generator validate (sai thì đưa lỗi lại cho AI, tối đa 3 lần) → mở PR nhánh ai/<FID>.
+# PR đó chạy workflow codegen (guard chế độ bot + toàn bộ pipeline) trước khi người duyệt.
+name: ai-spec
+
+on:
+  workflow_dispatch:
+    inputs:
+      function_id:
+        description: "Mã chức năng, vd ATA0_0130"
+        required: true
+      request:
+        description: "Mô tả chức năng bằng tiếng Việt (trường, kiểu, ràng buộc, codemap, quan hệ)"
+        required: true
+      parent:
+        description: "Chức năng cha (menu), vd ATA0_0100"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  spec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Cài thư viện
+        run: pip install -r requirements.txt -r requirements-ai.txt
+      - name: Cache model GGUF
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: qwen3-1.7b-q8-gguf
+      - name: Tải model (lần đầu)
+        run: |
+          mkdir -p models
+          [ -f models/Qwen3-1.7B-Q8_0.gguf ] || hf download Qwen/Qwen3-1.7B-GGUF Qwen3-1.7B-Q8_0.gguf --local-dir models
+      - name: AI viết spec
+        env:
+          AI_MODEL_PATH: models/Qwen3-1.7B-Q8_0.gguf
+          OMP_NUM_THREADS: "4"
+        run: >
+          python scripts/ai_spec.py --function-id "${{ inputs.function_id }}"
+          --parent "${{ inputs.parent }}" --request "${{ inputs.request }}"
+      - name: Mở PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FID="${{ inputs.function_id }}"
+          git config user.name "codegen-bot"
+          git config user.email "codegen-bot@users.noreply.github.com"
+          git checkout -b "ai/$FID-${{ github.run_id }}"
+          git add spec/
+          git commit -m "spec($FID): AI tạo spec từ mô tả"
+          git push origin HEAD
+          gh pr create --title "spec($FID): ${{ inputs.request }}" \
+            --body "Spec do AI nhỏ tạo (ép JSON schema + generator validate). Pipeline codegen sẽ sinh code, chạy guard và test. Người duyệt kiểm tra nghiệp vụ trước khi merge."

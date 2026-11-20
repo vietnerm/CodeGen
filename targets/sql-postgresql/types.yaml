@@ -1,0 +1,16 @@
+dialect: postgresql
+TEXT: text
+TEXT_N: "varchar({n})"
+INT: integer
+BIGINT: bigint
+DECIMAL: "numeric({p},{s})"
+DATE: date
+TIMESTAMP: timestamptz
+BOOL: boolean
+JSON: jsonb
+NOW: CURRENT_TIMESTAMP
+IDENTITY: GENERATED ALWAYS AS IDENTITY
+CREATE_SCHEMA: "CREATE SCHEMA IF NOT EXISTS {s};"
+CREATE_INDEX: "CREATE INDEX IF NOT EXISTS {name} ON {table} ({cols});"
+BEGIN: "BEGIN;"
+COMMIT: "COMMIT;"

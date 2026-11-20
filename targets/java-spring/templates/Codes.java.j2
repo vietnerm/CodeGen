@@ -1,0 +1,25 @@
+// SINH TỰ ĐỘNG bởi CodeGen từ spec/_codemaps.yaml — KHÔNG SỬA TAY
+package {{ project.package }};
+
+/**
+ * Hằng số cho mã CODEMAP hệ thống (system: true). Code CHỈ được rẽ nhánh theo các mã ở đây;
+ * mã nghiệp vụ tự thêm qua màn hình không có hằng số — không được so sánh cứng.
+ */
+public final class Codes {
+    private Codes() {}
+{% for g in ir.codemaps %}
+{% set sys = g.codes | selectattr('system') | list %}
+{% if sys %}
+
+    /** {{ g.name }} ({{ g.group }}) */
+    public static final class {{ g.group }} {
+        private {{ g.group }}() {}
+        public static final String GROUP = "{{ g.group }}";
+{% for c in sys %}
+        /** {{ c.label }} */
+        public static final String {{ ('C_' if c.code[0].isdigit() else '') ~ c.code }} = "{{ c.code }}";
+{% endfor %}
+    }
+{% endif %}
+{% endfor %}
+}

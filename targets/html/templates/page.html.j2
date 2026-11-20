@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- SINH TỰ ĐỘNG bởi CodeGen — {{ fn.id }} {{ fn.name }} — KHÔNG SỬA TAY -->
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ fn.id }} · {{ fn.name }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css">
+</head>
+<body>
+  <div class="page"><div class="page-wrapper"><div class="container-xl py-4">
+    <a href="/index.html" class="text-muted">← Menu</a>
+    <div id="app" class="mt-2"></div>
+  </div></div></div>
+  <script type="module">
+    import { core } from '/js/core.js';
+    import { renderCrudPage, renderLogin } from '/js/page.js';
+    import { {{ fn.id }} } from '/js/api/{{ fn.id }}.js';
+    const app = document.getElementById('app');
+    const start = () => renderCrudPage(app, {{ fn.id }}).catch((e) => {
+      if (e.status === 401) renderLogin(app, start); else app.textContent = e.message;
+    });
+    core.token ? start() : renderLogin(app, start);
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# Menu nhóm của module ATA0 (không có entity — chỉ là nút cây chức năng)
+module: ATA0
+schema: at
+functions:
+  - {id: ATA0_0000, name: Hệ thống ATM, type: MENU, sort: 20}
+  - {id: ATA0_0100, name: Quản lý ATM, type: MENU, parent: ATA0_0000, sort: 10}

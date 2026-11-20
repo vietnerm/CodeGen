@@ -1,0 +1,37 @@
+name: java-spring
+kind: backend
+ir_versions: ["1."]
+description: >
+  Spring Boot 3 + FlowSQL. Theo convention SYS/SUB/FUNCTION/{trx,mod}/FUNCTION_trx|_mod.
+  trx = controller (HTTP + quyền), mod = nghiệp vụ chuẩn sinh ra, hook = chỗ duy nhất viết tay.
+core_sdk: {group: vn.io.devhub, artifact: devhub-core, version: 0.1.0}
+outputs:
+  - {template: pom.xml.j2,           path: app/pom.xml,                                   scope: project}
+  - {template: application.yml.j2,   path: app/src/main/resources/application.yml,        scope: project}
+  - {template: Application.java.j2,  path: "app/src/main/java/{package_path}/Application.java", scope: project}
+  - {template: Codes.java.j2,        path: "app/src/main/java/{package_path}/Codes.java",       scope: codemap}
+  - {template: dto.java.j2,  path: "app/src/main/java/{package_path}/{sys_l}/{sub_l}/{fid_l}/mod/{fid}_dto.java", scope: function}
+  - {template: hook.java.j2, path: "app/src/main/java/{package_path}/{sys_l}/{sub_l}/{fid_l}/mod/{fid}_hook.java", scope: function}
+  - {template: mod.java.j2,  path: "app/src/main/java/{package_path}/{sys_l}/{sub_l}/{fid_l}/mod/{fid}_mod.java", scope: function}
+  - {template: trx.java.j2,  path: "app/src/main/java/{package_path}/{sys_l}/{sub_l}/{fid_l}/trx/{fid}_trx.java", scope: function}
+  # Sinh 1 lần vào custom/ (commit vào git) — người/AI viết hook ở đây, generator không ghi đè
+  - {template: hookImpl.java.j2, path: "custom/java/{package_path}/{sys_l}/{sub_l}/{fid_l}/mod/{fid}_hookImpl.java",
+     scope: function, once: true}
+copy:
+  - {from: "repo:custom/java", to: app/src/main/java}
+  - {from: catalog,  to: app/src/main/resources/sql}
+  - {from: web,      to: app/src/main/resources/static}
+  - {from: openapi,  to: app/src/main/resources/static/openapi}
+  - {from: docs,     to: app/src/main/resources/static/docs}
+editable_globs:
+  - "spec/*/*/*.yaml"
+  - "custom/java/**/*_hookImpl.java"
+forbidden_imports:          # guard: hook không được vượt qua core
+  - java.sql
+  - javax.sql
+  - java.net
+  - java.net.http
+  - vn.io.devhub.flowsql
+  - org.springframework.jdbc
+build: "mvn -B -q -f core/java/pom.xml install -DskipTests && mvn -B -q -f out/app/pom.xml package -DskipTests"
+run: "java -jar out/app/target/app.jar"

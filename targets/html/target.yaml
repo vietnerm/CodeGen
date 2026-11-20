@@ -1,0 +1,7 @@
+name: html
+kind: shared
+ir_versions: ["1."]
+description: Trang CRUD chuẩn (Tabler) dựng từ meta của api module bằng core/page.js
+outputs:
+  - {template: page.html.j2,  path: "web/pages/{fid}.html", scope: function}
+  - {template: index.html.j2, path: web/index.html, scope: project}
