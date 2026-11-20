@@ -58,7 +58,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements*.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-ci.txt
 
       - uses: actions/setup-java@v4
         with:
@@ -67,7 +69,24 @@ jobs:
           cache: maven
 
       - name: Cài thư viện
-        run: pip install -r requirements.txt -r requirements-ci.txt -r requirements-ai.txt
+        run: pip install -r requirements.txt -r requirements-ci.txt "$(grep -i '^huggingface-hub' requirements-ai.txt)"
+
+      - name: Cache llama-cpp-python (build portable)
+        uses: actions/cache@v4
+        with:
+          path: wheels
+          key: llama-cpp-portable-avx2-${{ hashFiles('requirements-ai.txt') }}-v1
+
+      - name: Cài llama-cpp-python (portable, không -march=native)
+        # Bản build mặc định tối ưu theo CPU của runner build → chạy trên runner khác bị "Illegal instruction".
+        env:
+          CMAKE_ARGS: "-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_AVX512=OFF"
+          FORCE_CMAKE: "1"
+        run: |
+          mkdir -p wheels
+          ls wheels/llama_cpp_python-*.whl >/dev/null 2>&1 || \
+            pip wheel --no-deps --no-cache-dir -w wheels "$(grep -i '^llama-cpp-python' requirements-ai.txt)"
+          pip install --no-cache-dir wheels/llama_cpp_python-*.whl
 
       - name: Cache model GGUF
         uses: actions/cache@v4
