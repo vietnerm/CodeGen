@@ -1,0 +1,29 @@
+# Nhóm CODEMAP. Mã có `system: true` (hoặc cả nhóm `system: true`) được sinh thành hằng số
+# cho mọi target (Java/JS/…); code chỉ được rẽ nhánh theo các mã này.
+# Mã thường: nghiệp vụ tự thêm qua màn hình, không cần deploy, code KHÔNG được rẽ nhánh theo.
+codemap_groups:
+  STATUS_AI:
+    name: Trạng thái
+    module: ZZA0
+    system: true
+    codes:
+      - {code: A, label: Hoạt động}
+      - {code: I, label: Ngừng}
+
+  DEVICE_TYPE:
+    name: Loại thiết bị
+    module: ATA0
+    tenant_editable: true
+    attr_fields:                      # cùng định dạng field của entity
+      - {name: vendor, type: TEXT, length: 50, label: Hãng}
+    codes:
+      - {code: ATM, label: Máy rút tiền, system: true, attrs: {vendor: NCR}}
+      - {code: CDM, label: Máy nộp tiền, attrs: {vendor: Hyosung}}
+      - {code: CRM, label: Máy gửi rút, attrs: {vendor: GRG}}
+
+  CURRENCY:
+    name: Tiền tệ
+    module: ZZA0
+    codes:
+      - {code: VND, label: Việt Nam đồng, system: true}
+      - {code: USD, label: Đô la Mỹ}

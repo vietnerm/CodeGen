@@ -1,0 +1,40 @@
+// SINH TỰ ĐỘNG bởi CodeGen — {{ fn.id }} {{ fn.name }} — KHÔNG SỬA TAY
+import { core } from '../core.js';
+
+const BASE = '{{ fn.api_base }}';
+const key = ({{ ent.pk | join(', ') }}) => {% for c in ent.pk %}`/${encodeURIComponent({{ c }})}`{{ ' + ' if not loop.last }}{% endfor %};
+
+/** @typedef {Object} {{ fn.id }}Row
+{% for f in ent.api_fields %}
+ * @property { {{- {'TEXT':'string','INT':'number','BIGINT':'number','DECIMAL':'number','DATE':'string','TIMESTAMP':'string','BOOL':'boolean','JSON':'string'}[f.type] -}} {% if f.nullable %}|null{% endif %} } {{ f.name }} {{ f.label }}
+{% endfor %}
+ */
+export const {{ fn.id }} = {
+  meta: {{ {
+    'id': fn.id, 'name': fn.name, 'base': fn.api_base, 'pk': ent.pk,
+    'search': ent.search_fields | map(attribute='name') | list,
+    'list': (ent.pk + (ent.api_fields | rejectattr('system') | rejectattr('name', 'in', ent.pk) | map(attribute='name') | list))[:7],
+    'actions': fn.actions | map(attribute='code') | list,
+    'fields': ent.api_fields | map('pick', 'name', 'label', 'type', 'length', 'required', 'readonly', 'system', 'nullable', 'pattern', 'enum', 'codemap', 'min', 'max') | list
+  } | tojson(2) | indent(2) }},
+{% for a in fn.actions %}
+{% if a.code == 'SEARCH' %}
+  /** {{ a.method }} {{ a.path }} · quyền {{ a.right }} · lọc: {{ ent.search_fields | map(attribute='name') | join(', ') or '-' }} */
+  search(query = {}) { return core.request('GET', BASE, { query }); },
+{% elif a.code == 'GET' %}
+  /** {{ a.method }} {{ a.path }} · quyền {{ a.right }} */
+  get({{ ent.pk | join(', ') }}) { return core.request('GET', BASE + key({{ ent.pk | join(', ') }})); },
+{% elif a.code == 'CREATE' %}
+  /** {{ a.method }} {{ a.path }} · quyền {{ a.right }} */
+  create(body) { return core.request('POST', BASE, { body }); },
+{% elif a.code == 'UPDATE' %}
+  /** {{ a.method }} {{ a.path }} · quyền {{ a.right }} · body cần row_version hiện tại */
+  update({{ ent.pk | join(', ') }}, body) { return core.request('PUT', BASE + key({{ ent.pk | join(', ') }}), { body }); },
+{% elif a.code == 'DELETE' %}
+  /** {{ a.method }} {{ a.path }} · quyền {{ a.right }} */
+  remove({{ ent.pk | join(', ') }}{% if ent.versioned %}, rowVersion{% endif %}) {
+    return core.request('DELETE', BASE + key({{ ent.pk | join(', ') }}){% if ent.versioned %}, { query: { row_version: rowVersion } }{% endif %});
+  },
+{% endif %}
+{% endfor %}
+};

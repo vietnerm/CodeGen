@@ -1,0 +1,17 @@
+# Dữ liệu cho môi trường test / CI. Mật khẩu được generator băm PBKDF2
+# (cùng định dạng mà core Java kiểm tra) — không lưu hash tay.
+tenants: [T1, T2]
+
+roles:
+  - {role_id: APP_MAKER,  role_name: Người nhập liệu, grants: {ATA0_0110: RWD, ATA0_0120: RWD}}
+  - {role_id: APP_VIEWER, role_name: Người xem,       grants: {ATA0_0110: R,   ATA0_0120: R}}
+
+users:
+  - {user_id: maker1,  user_name: Maker T1,  password: 'Passw0rd!', tenant: T1, units: [HN01, HN02], roles: [APP_MAKER]}
+  - {user_id: viewer1, user_name: Viewer T1, password: 'Passw0rd!', tenant: T1, units: [HN01],       roles: [APP_VIEWER]}
+  - {user_id: maker2,  user_name: Maker T2,  password: 'Passw0rd!', tenant: T2, units: [SG01],       roles: [APP_MAKER]}
+
+# Tenant T2 có thêm loại thiết bị riêng và ẩn CRM → test ghi đè codemap theo tenant
+codemap_overrides:
+  - {tenant: T2, group: DEVICE_TYPE, code: KIOSK, label: Kiosk tự phục vụ}
+  - {tenant: T2, group: DEVICE_TYPE, code: CRM, status: I}

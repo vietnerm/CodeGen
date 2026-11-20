@@ -1,0 +1,27 @@
+# Cấu hình dự án sinh ra. Kiến trúc sư sở hữu file này — AI không sửa.
+project:
+  name: devhub-app
+  group: vn.io.devhub
+  package: vn.io.devhub.app
+  version: 0.1.0
+  title: Devhub App
+
+# Dialect đầu tiên là CHUẨN: mọi SQL viết theo dialect này, sqlglot chuyển sang các dialect còn lại.
+dialects: [postgresql, mysql]
+
+# Target chạy theo thứ tự. Backend của từng function chọn bằng `function.target` (mặc định java-spring).
+targets: [sql-postgresql, sql-mysql, sql-catalog, openapi, docs, java-spring, js-sdk, html, test-http]
+
+# Bộ cột chuẩn. Entity khai báo `profiles: [...]` thì generator tự thêm.
+profiles:
+  tenant:
+    - {name: tenant_id, type: TEXT, length: 20, label: Tenant, system: true}
+  owner_unit:
+    - {name: owner_unit, type: TEXT, length: 20, label: Đơn vị sở hữu, example: HN01, search: eq}
+  audit:
+    - {name: create_id, type: TEXT, length: 64, label: Người tạo, system: true, readonly: true}
+    - {name: create_dt, type: TIMESTAMP, label: Ngày tạo, default: now, system: true, readonly: true}
+    - {name: update_id, type: TEXT, length: 64, label: Người sửa, system: true, readonly: true}
+    - {name: update_dt, type: TIMESTAMP, label: Ngày sửa, default: now, system: true, readonly: true}
+  versioned:
+    - {name: row_version, type: BIGINT, label: Phiên bản dòng, default: 0, system: true, readonly: true}

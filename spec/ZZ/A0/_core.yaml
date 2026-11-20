@@ -1,0 +1,174 @@
+# ═══════════════════════════════════════════════════════════════════
+# CORE DB (ZZA0) — "db có trước". Kiến trúc sư sở hữu, AI KHÔNG sửa.
+# `core: true` = chỉ sinh DDL + tài liệu + kiểm tra toàn vẹn, KHÔNG sinh CRUD:
+# logic nằm trong core SDK (devhub-core) viết tay.
+# Không FOREIGN KEY: quan hệ khai báo ở `relations`, generator sinh câu kiểm tra.
+# ═══════════════════════════════════════════════════════════════════
+module: ZZA0
+schema: zz
+
+entities:
+  - name: app_user
+    label: Người dùng
+    core: true
+    pk: [user_id]
+    profiles: [audit]
+    fields:
+      - {name: user_id, type: TEXT, length: 64, label: Mã người dùng, pattern: '^[a-z0-9._-]{3,64}$'}
+      - {name: user_name, type: TEXT, length: 200, label: Họ tên}
+      - {name: email, type: TEXT, length: 200, label: Email, nullable: true, sensitive: true}
+      - {name: status, type: TEXT, length: 1, label: Trạng thái, enum: [A, I, L], default: A}
+
+  - name: app_credential
+    label: Mật khẩu người dùng
+    core: true
+    pk: [user_id]
+    fields:
+      - {name: user_id, type: TEXT, length: 64, label: Mã người dùng}
+      - {name: password_hash, type: TEXT, length: 300, label: Hash PBKDF2, sensitive: true}
+      - {name: changed_dt, type: TIMESTAMP, label: Ngày đổi, default: now}
+
+  - name: user_unit
+    label: Người dùng thuộc đơn vị
+    core: true
+    pk: [tenant_id, user_id, unit_code]
+    fields:
+      - {name: tenant_id, type: TEXT, length: 20, label: Tenant}
+      - {name: user_id, type: TEXT, length: 64, label: Người dùng}
+      - {name: unit_code, type: TEXT, length: 20, label: Đơn vị}
+      - {name: is_primary, type: TEXT, length: 1, label: Đơn vị chính, enum: ['Y', 'N'], default: 'N'}
+      - {name: status, type: TEXT, length: 1, label: Trạng thái, enum: [A, I], default: A}
+
+  - name: role
+    label: Vai trò
+    core: true
+    pk: [role_id]
+    profiles: [audit]
+    fields:
+      - {name: role_id, type: TEXT, length: 40, label: Mã vai trò, pattern: '^[A-Z][A-Z0-9_]{2,39}$'}
+      - {name: role_name, type: TEXT, length: 200, label: Tên vai trò}
+      - {name: status, type: TEXT, length: 1, label: Trạng thái, enum: [A, I], default: A}
+
+  - name: function
+    label: Chức năng
+    core: true
+    pk: [function_id]
+    fields:
+      - {name: function_id, type: TEXT, length: 9, label: Mã chức năng, pattern: '^[A-Z]{2}[A-Z0-9]{2}_[0-9]{4}$'}
+      - {name: module_prefix, type: TEXT, length: 4, label: Module}
+      - {name: function_name, type: TEXT, length: 200, label: Tên chức năng}
+      - {name: function_type, type: TEXT, length: 4, label: Loại, enum: [MENU, BOTH, API], default: MENU}
+      - {name: url, type: TEXT, length: 300, label: URL, nullable: true}
+      - {name: sort_order, type: INT, label: Thứ tự, default: 0}
+
+  - name: function_tree
+    label: Cây chức năng
+    core: true
+    pk: [function_id]
+    fields:
+      - {name: function_id, type: TEXT, length: 9, label: Chức năng}
+      - {name: parent_function_id, type: TEXT, length: 9, label: Chức năng cha}
+
+  - name: role_function
+    label: Quyền của vai trò
+    core: true
+    pk: [role_id, function_id]
+    profiles: [audit]
+    fields:
+      - {name: role_id, type: TEXT, length: 40, label: Vai trò}
+      - {name: function_id, type: TEXT, length: 9, label: Chức năng}
+      - {name: right_mask, type: INT, label: Quyền R=1 W=2 D=4 X=8, min: 1, max: 15}
+
+  - name: user_role
+    label: Gán vai trò (theo tenant)
+    core: true
+    pk: [tenant_id, user_id, role_id]
+    profiles: [audit]
+    fields:
+      - {name: tenant_id, type: TEXT, length: 20, label: Tenant}
+      - {name: user_id, type: TEXT, length: 64, label: Người dùng}
+      - {name: role_id, type: TEXT, length: 40, label: Vai trò}
+      - {name: approval_status, type: TEXT, length: 1, label: Duyệt, enum: [P, A], default: P}
+      - {name: assigner_id, type: TEXT, length: 64, label: Maker}
+      - {name: approver_id, type: TEXT, length: 64, label: Checker, nullable: true}
+      - {name: effective_from, type: DATE, label: Hiệu lực từ, nullable: true}
+      - {name: effective_to, type: DATE, label: Hiệu lực đến, nullable: true}
+    checks:
+      - {name: no_self_assign, expr: "assigner_id <> user_id"}
+      - {name: approved_has_checker, expr: "approval_status = 'P' OR approver_id IS NOT NULL"}
+
+  - name: codemap_group
+    label: Nhóm CODEMAP
+    core: true
+    pk: [group_code]
+    profiles: [audit]
+    fields:
+      - {name: group_code, type: TEXT, length: 40, label: Mã nhóm, pattern: '^[A-Z][A-Z0-9_]{1,39}$'}
+      - {name: module_prefix, type: TEXT, length: 4, label: Module}
+      - {name: group_name, type: TEXT, length: 200, label: Tên nhóm}
+      - {name: parent_group, type: TEXT, length: 40, label: Nhóm cha, nullable: true}
+      - {name: attr_fields, type: JSON, label: Thuộc tính thêm (định dạng field), nullable: true}
+      - {name: tenant_editable, type: TEXT, length: 1, label: Tenant được sửa, enum: ['Y', 'N'], default: 'N'}
+      - {name: data_version, type: BIGINT, label: Phiên bản dữ liệu (ETag), default: 0}
+      - {name: status, type: TEXT, length: 1, label: Trạng thái, enum: [A, I], default: A}
+
+  - name: codemap
+    label: Giá trị CODEMAP
+    core: true
+    pk: [tenant_id, group_code, code]
+    profiles: [audit, versioned]
+    description: "tenant_id = '*' là giá trị chung; dòng của tenant cùng mã ghi đè (status I = ẩn)"
+    fields:
+      - {name: tenant_id, type: TEXT, length: 20, label: Tenant}
+      - {name: group_code, type: TEXT, length: 40, label: Nhóm}
+      - {name: code, type: TEXT, length: 40, label: Mã}
+      - {name: parent_code, type: TEXT, length: 40, label: Mã cha, nullable: true}
+      - {name: seq, type: INT, label: Thứ tự, default: 0}
+      - {name: attrs, type: JSON, label: Thuộc tính, nullable: true}
+      - {name: is_system, type: TEXT, length: 1, label: Mã hệ thống, enum: ['Y', 'N'], default: 'N'}
+      - {name: effective_from, type: DATE, label: Hiệu lực từ, nullable: true}
+      - {name: effective_to, type: DATE, label: Hiệu lực đến, nullable: true}
+      - {name: status, type: TEXT, length: 1, label: Trạng thái, enum: [A, I], default: A}
+
+  - name: codemap_label
+    label: Nhãn CODEMAP đa ngôn ngữ
+    core: true
+    pk: [tenant_id, group_code, code, lang]
+    fields:
+      - {name: tenant_id, type: TEXT, length: 20, label: Tenant}
+      - {name: group_code, type: TEXT, length: 40, label: Nhóm}
+      - {name: code, type: TEXT, length: 40, label: Mã}
+      - {name: lang, type: TEXT, length: 5, label: Ngôn ngữ, pattern: '^[a-z]{2}(-[A-Z]{2})?$'}
+      - {name: label, type: TEXT, length: 200, label: Nhãn}
+
+  - name: audit_log
+    label: Nhật ký thao tác
+    core: true
+    pk: [audit_id]
+    fields:
+      - {name: audit_id, type: BIGINT, label: ID, identity: true}
+      - {name: ts, type: TIMESTAMP, label: Thời điểm, default: now}
+      - {name: tenant_id, type: TEXT, length: 20, label: Tenant, nullable: true}
+      - {name: actor_id, type: TEXT, length: 64, label: Người thực hiện}
+      - {name: function_id, type: TEXT, length: 9, label: Chức năng}
+      - {name: action, type: TEXT, length: 20, label: Hành động}
+      - {name: target, type: TEXT, length: 300, label: Đối tượng}
+      - {name: detail, type: TEXT, label: Chi tiết JSON, nullable: true}
+    indexes:
+      - [tenant_id, ts]
+
+relations:
+  - {child: app_credential, cols: [user_id], parent: app_user, on_delete: CASCADE}
+  - {child: user_unit, cols: [user_id], parent: app_user, on_delete: CASCADE}
+  - {child: user_role, cols: [user_id], parent: app_user, on_delete: RESTRICT}
+  - {child: user_role, cols: [role_id], parent: role, on_delete: CASCADE}
+  - {child: role_function, cols: [role_id], parent: role, on_delete: CASCADE}
+  - {child: role_function, cols: [function_id], parent: function, on_delete: CASCADE}
+  - {child: function_tree, cols: [function_id], parent: function, on_delete: CASCADE, name: node}
+  - {child: function_tree, cols: [parent_function_id], parent: function, on_delete: RESTRICT, name: parent}
+  - {child: codemap, cols: [group_code], parent: codemap_group, on_delete: CASCADE}
+  - {child: codemap_label, cols: [tenant_id, group_code, code], parent: codemap, on_delete: CASCADE}
+
+# Menu gốc của module ZZ
+functions:
+  - {id: ZZA0_0000, name: Hệ thống, type: MENU, sort: 10}

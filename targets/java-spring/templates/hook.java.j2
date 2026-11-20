@@ -1,0 +1,25 @@
+{% import '_macros.j2' as m with context %}
+// SINH TỰ ĐỘNG bởi CodeGen — KHÔNG SỬA TAY. Cài đặt nằm ở custom/…/{{ fn.id }}_hookImpl.java
+package {{ m.pkg(fn, 'mod') }};
+
+import vn.io.devhub.core.Ctx;
+import vn.io.devhub.core.Errors;
+
+/**
+ * Điểm mở rộng nghiệp vụ của {{ fn.id }} — {{ fn.name }}.
+ * Mod đã kiểm: quyền, tenant/đơn vị, bắt buộc/độ dài/pattern/enum/khoảng/CODEMAP, tham chiếu,
+ * khoá lạc quan, RESTRICT. Hook chỉ thêm luật riêng; báo lỗi qua errors.add(field, "HOOK", msg).
+ */
+public interface {{ fn.id }}_hook {
+{% for h in fn.hooks %}
+
+    /** {{ h.phase }} · {{ h.actions | join(', ') }} — {{ h.description }} */
+{% if h.phase == 'VALIDATE' %}
+    default void {{ h.name }}(Ctx ctx, String action, {{ fn.id }}_dto dto, Errors errors) {}
+{% elif h.phase == 'BEFORE_SAVE' %}
+    default {{ fn.id }}_dto {{ h.name }}(Ctx ctx, String action, {{ fn.id }}_dto dto) { return dto; }
+{% else %}
+    default void {{ h.name }}(Ctx ctx, String action, {{ fn.id }}_dto dto) {}
+{% endif %}
+{% endfor %}
+}

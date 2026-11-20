@@ -1,0 +1,4 @@
+name: sql-mysql
+kind: shared
+ir_versions: ["1."]
+description: DDL + seed + dữ liệu test + kiểm tra toàn vẹn cho MySQL 8.0.16+ (cần CHECK constraint)

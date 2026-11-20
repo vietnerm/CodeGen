@@ -1,0 +1,41 @@
+{% import '_macros.j2' as m with context %}
+// SINH TỰ ĐỘNG bởi CodeGen từ spec/{{ fn.sys }}/{{ fn.sub }}/{{ fn.id }}.yaml — KHÔNG SỬA TAY
+package {{ m.pkg(fn, 'mod') }};
+
+import java.util.Map;
+import vn.io.devhub.core.Conv;
+
+/**
+ * {{ ent.label }} ({{ ent.table }}). JSON dùng snake_case (= tên cột = OpenAPI).
+{% for f in ent.api_fields %}
+ * @param {{ f.n.camel }} {{ f.label }}{% if f.readonly %} (chỉ đọc){% endif %}
+
+{% endfor %}
+ */
+public record {{ fn.id }}_dto(
+{% for f in ent.api_fields %}
+        {{ f | ftype }} {{ f.n.camel }}{{ ',' if not loop.last }}
+{% endfor %}
+) {
+    public static {{ fn.id }}_dto of(Map<String, Object> r) {
+        return new {{ fn.id }}_dto(
+{% for f in ent.api_fields %}
+                Conv.{{ types.conv[f.type] }}(r, "{{ f.name }}"){{ ',' if not loop.last }}
+{% endfor %}
+        );
+    }
+
+    /** Bản sao với khoá lấy từ path (PUT/DELETE). */
+    public {{ fn.id }}_dto withKey({% for f in ent.pk_fields %}{{ f | ftype }} {{ f.n.camel }}{{ ', ' if not loop.last }}{% endfor %}) {
+        return new {{ fn.id }}_dto(
+{% for f in ent.api_fields %}
+                {% if f.name in ent.pk %}{{ f.n.camel }}{% else %}this.{{ f.n.camel }}{% endif %}{{ ',' if not loop.last }}
+{% endfor %}
+        );
+    }
+
+    /** Khoá dạng chuỗi cho audit/thông báo. */
+    public String key() {
+        return {% for f in ent.pk_fields %}String.valueOf({{ f.n.camel }}){{ ' + "/" + ' if not loop.last }}{% endfor %};
+    }
+}

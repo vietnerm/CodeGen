@@ -1,0 +1,6 @@
+name: openapi
+kind: shared
+ir_versions: ["1."]
+description: >
+  OpenAPI 3.0 sinh từ IR (không từ annotation) → tài liệu luôn khớp code. Mở rộng x-* cho
+  agent lớn: x-function-id, x-required-right, x-codemap, x-relations, x-hooks.

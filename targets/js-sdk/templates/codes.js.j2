@@ -1,0 +1,8 @@
+// SINH TỰ ĐỘNG bởi CodeGen từ spec/_codemaps.yaml — mã CODEMAP hệ thống (system: true)
+{% for g in ir.codemaps %}
+{% set sys = g.codes | selectattr('system') | list %}
+{% if sys %}
+/** {{ g.name }} */
+export const {{ g.group }} = Object.freeze({ {% for c in sys %}{{ c.code }}: '{{ c.code }}'{{ ', ' if not loop.last }}{% endfor %} });
+{% endif %}
+{% endfor %}

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- devhub-core: core SDK cố định (auth, db, codemap, lỗi, audit). Viết tay, có version.
+     Code sinh ra chỉ được gọi API của core — không gọi JDBC/HTTP trực tiếp. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.5</version>
+    <relativePath/>
+  </parent>
+  <groupId>vn.io.devhub</groupId>
+  <artifactId>devhub-core</artifactId>
+  <version>0.1.0</version>
+  <name>devhub-core</name>
+  <properties>
+    <java.version>21</java.version>
+    <flowsql.version>1.0.0</flowsql.version>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>vn.io.devhub</groupId>
+      <artifactId>flowsql</artifactId>
+      <version>${flowsql.version}</version>
+    </dependency>
+  </dependencies>
+</project>

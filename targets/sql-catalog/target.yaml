@@ -1,0 +1,6 @@
+name: sql-catalog
+kind: shared
+ir_versions: ["1."]
+description: >
+  Catalog câu SQL có tên (:name param) cho MỌI dialect trong _project.yaml. Core của mọi
+  ngôn ngữ đọc cùng file này qua FlowSQL (Java) / bản port (C++…).

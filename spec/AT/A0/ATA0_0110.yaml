@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════════════════════════
+# 1 file = 1 chức năng CRUD. Đây là file AI được phép tạo/sửa.
+# Generator sinh: DDL, SQL catalog (mọi dialect), API + OpenAPI, tài liệu,
+# Java trx/mod/dto/hook, JS SDK, trang HTML, test HTTP.
+# ═══════════════════════════════════════════════════════════════════
+module: ATA0
+schema: at
+
+function:
+  id: ATA0_0110
+  name: Thiết bị ATM
+  parent: ATA0_0100
+  sort: 10
+  description: Danh mục thiết bị ATM/CDM/CRM của từng đơn vị.
+
+entity:
+  name: atm_device
+  label: Thiết bị ATM
+  pk: [device_id]
+  profiles: [tenant, owner_unit, audit, versioned]
+  fields:
+    - {name: device_id, type: TEXT, length: 20, label: Mã thiết bị,
+       pattern: '^[A-Z0-9]{4,20}$', example: ATM0001, search: eq}
+    - {name: device_name, type: TEXT, length: 200, label: Tên thiết bị,
+       example: ATM Hội sở, search: like}
+    - {name: device_type, type: TEXT, length: 10, label: Loại thiết bị,
+       codemap: DEVICE_TYPE, example: ATM, search: eq}
+    - {name: install_date, type: DATE, label: Ngày lắp đặt, nullable: true, example: '2026-01-15'}
+    - {name: cash_limit, type: DECIMAL, precision: 18, scale: 2, label: Hạn mức tiền mặt,
+       min: 0, example: 500000000}
+    - {name: status, type: TEXT, length: 1, label: Trạng thái, enum: [A, I],
+       codemap: STATUS_AI, default: A, example: A, search: eq}
+
+actions: [SEARCH, GET, CREATE, UPDATE, DELETE]
+
+# Code nghiệp vụ mà generator KHÔNG sinh được → agent viết trong custom/…/ATA0_0110_hookImpl.java
+hooks:
+  - {phase: VALIDATE, name: validateDevice, actions: [CREATE, UPDATE],
+     description: "Ngày lắp đặt không được ở tương lai"}
+
+# Test thêm cho hook (engine chạy chung, không phụ thuộc ngôn ngữ backend)
+tests:
+  - {name: "Ngày lắp đặt ở tương lai bị hook chặn", action: CREATE,
+     patch: {device_id: ATM9001, install_date: '2999-01-01'},
+     expect: {status: 400, field: install_date, code: HOOK}}

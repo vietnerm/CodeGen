@@ -1,0 +1,6 @@
+// SINH TỰ ĐỘNG bởi CodeGen — điểm vào SDK
+export { core, ApiError } from './core.js';
+export * as codes from './codes.js';
+{% for f in crud %}
+export { {{ f.id }} } from './api/{{ f.id }}.js';
+{% endfor %}

@@ -1,0 +1,4 @@
+name: sql-postgresql
+kind: shared
+ir_versions: ["1."]
+description: DDL + seed + dữ liệu test + kiểm tra toàn vẹn cho PostgreSQL (không FOREIGN KEY)
