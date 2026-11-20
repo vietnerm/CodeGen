@@ -88,6 +88,13 @@ def _load(path: Path, rep: Report):
 
 
 # ─────────────────────────── field ───────────────────────────
+def _safe_match(pattern, value):
+    try:
+        return re.fullmatch(pattern.removeprefix('^').removesuffix('$'), value) is not None
+    except re.error:
+        return True
+
+
 def _field(f: dict, where: str, rep: Report, codemaps: dict, from_profile=False) -> dict:
     name = f.get('name')
     w = f"{where}.{name}"
@@ -127,6 +134,30 @@ def _field(f: dict, where: str, rep: Report, codemaps: dict, from_profile=False)
         rep.err(w, "search: like chỉ cho TEXT")
     system = bool(f.get('system', False))
     nullable = bool(f.get('nullable', False))
+    ex = f.get('example')
+    if ex is not None:                                   # ví dụ phải hợp lệ: test & tài liệu dùng nó
+        if t == 'TEXT':
+            if not isinstance(ex, str):
+                rep.err(w, f"example {ex!r} phải là chuỗi")
+            else:
+                if f.get('length') and len(ex) > f['length']:
+                    rep.err(w, f"example {ex!r} dài hơn length {f['length']}")
+                if f.get('pattern') and not _safe_match(f['pattern'], ex):
+                    rep.err(w, f"example {ex!r} không khớp pattern {f['pattern']}")
+        elif t in ('INT', 'BIGINT', 'DECIMAL'):
+            if not isinstance(ex, (int, float)) or isinstance(ex, bool):
+                rep.err(w, f"example {ex!r} phải là số")
+            else:
+                if f.get('min') is not None and ex < f['min']:
+                    rep.err(w, f"example {ex} nhỏ hơn min {f['min']}")
+                if f.get('max') is not None and ex > f['max']:
+                    rep.err(w, f"example {ex} lớn hơn max {f['max']}")
+        elif t == 'DATE' and not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(ex)):
+            rep.err(w, f"example {ex!r} phải dạng YYYY-MM-DD")
+        if enum and str(ex) not in enum:
+            rep.err(w, f"example {ex!r} không thuộc enum {enum}")
+        if cm and cm in codemaps and str(ex) not in {c['code'] for c in codemaps[cm]['codes']}:
+            rep.err(w, f"example {ex!r} không có trong codemap {cm}")
     return {
         'name': name, 'n': names(name), 'label': f.get('label') or name, 'type': t,
         'length': f.get('length'), 'precision': f.get('precision'), 'scale': f.get('scale') or 0,
@@ -253,6 +284,10 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
             ent['search_fields'] = [f for f in fields if f['search']]
             ent['sort_fields'] = [f['name'] for f in fields
                                   if not f['sensitive'] and f['type'] not in ('JSON',) and f['name'] != 'tenant_id']
+            if fid:
+                for f in fields:
+                    if (f['required'] or f['name'] in pk) and f['example'] is None and not f['from_profile']:
+                        rep.err(f"{w}.{f['name']}", "trường bắt buộc cần example (dùng cho test + tài liệu)")
             ent['example'] = {f['name']: f['example'] for f in fields
                               if f['example'] is not None and (f['name'] in pk or not f['readonly'])}
             entities[eid] = ent
@@ -445,12 +480,18 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
         for rl in u.get('roles') or []:
             if rl not in {x['role_id'] for x in testdata.get('roles') or []}:
                 rep.err('_testdata.yaml', f"user {u.get('user_id')}: role {rl} chưa khai báo")
+    import fnmatch
     for rl in testdata.get('roles') or []:
-        for fid, rights in (rl.get('grants') or {}).items():
-            if fid not in fn_by_id:
-                rep.err('_testdata.yaml', f"role {rl['role_id']}: function {fid} không tồn tại")
+        expanded = {}
+        for pat, rights in (rl.get('grants') or {}).items():   # mã cụ thể hoặc mẫu, vd ATA0_*
+            hits = [f for f in sorted(fn_by_id) if fnmatch.fnmatchcase(f, pat) and fn_by_id[f]['entity']]
+            if not hits:
+                rep.err('_testdata.yaml', f"role {rl['role_id']}: {pat} không khớp chức năng CRUD nào")
             if not re.fullmatch(r'[RWDX]+', str(rights)):
                 rep.err('_testdata.yaml', f"role {rl['role_id']}: quyền {rights!r} phải gồm R/W/D/X")
+            for f in hits:
+                expanded[f] = rights
+        rl['grants'] = expanded
     for o in testdata.get('codemap_overrides') or []:
         if o.get('group') not in codemaps:
             rep.err('_testdata.yaml', f"codemap_overrides: nhóm {o.get('group')} không tồn tại")

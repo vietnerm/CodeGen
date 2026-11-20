@@ -84,7 +84,10 @@ python generator.py impact ATA0_0120                              # đổi chứ
 python generator.py schema                                        # JSON schema động: chỉ nhận chức năng/codemap/cột đang có
 ```
 
-`ai_spec.py` đưa **ngữ cảnh** này vào prompt và ép output theo **schema động** ⇒ model nhỏ không bịa được tên bảng/cột.
+`ai_spec.py` chia việc cho hợp model nhỏ: **model chỉ trích danh sách trường** từ mô tả (schema nhỏ, `ref`/`codemap`
+chỉ nhận giá trị đang có); **code ghép spec đầy đủ tất định** — profile, độ dài, tiền tệ, trạng thái, quan hệ + lookup
+(kiểu/độ dài cột tham chiếu copy từ khoá bảng cha), hook từ luật nghiệp vụ. Validator kiểm cả `example` (pattern/enum/
+độ dài/khoảng/codemap) và đưa lỗi lại cho model. Quyền test khai báo theo mẫu (`ATA0_*`) nên chức năng mới tự có quyền.
 
 ## Issue → AI tự xử lý
 
