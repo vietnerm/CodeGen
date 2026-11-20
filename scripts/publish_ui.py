@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -52,6 +53,47 @@ def push_shots(label):
     return f"https://github.com/{repo}/blob/{BRANCH}/{prefix}"
 
 
+def changes_section() -> list[str]:
+    """Bảng FID thay đổi (PR-16 mục 6): chạy `generator.py changes --base` với ref gốc của PR."""
+    base = os.environ.get('BASE_REF', '')
+    if not base:
+        return []
+    try:
+        r = subprocess.run([sys.executable, str(ROOT / 'generator.py'), 'changes',
+                            '--base', base, '--json'],
+                           cwd=ROOT, capture_output=True, text=True, timeout=300)
+        if r.returncode != 0:
+            return [f'_(bỏ qua bảng changes: {r.stderr.strip()[:120]})_', '']
+        d = json.loads(r.stdout)
+    except Exception as e:                                   # comment ảnh không được hỏng vì bảng này
+        return [f'_(bỏ qua bảng changes: {e})_', '']
+    L = [f"### 🔎 FID thay đổi so với `{base}`", '']
+    if d.get('all'):
+        return L + [f"**ALL** — {d.get('reason_all')}", '']
+    mark = {'moi': 'mới', 'doi': 'đổi', 'xoa': 'xoá', 'giu': 'giữ'}
+    L += ['| FID | Trạng thái | Lý do |', '|---|---|---|']
+    for r in d.get('rows') or []:
+        if r['status'] == 'giu' and not r['reason']:
+            continue                        # dòng 'giữ' không lý do: bỏ, giữ comment gọn
+        L.append(f"| `{r['fid']}` | {mark[r['status']]} | {r['reason']} |")
+    if d.get('affected'):
+        L += ['', 'Bị ảnh hưởng: ' + ', '.join(f"`{f}`" for f in d['affected'])]
+    return L + ['']
+
+
+def timing_section() -> list[str]:
+    """Thời gian từng bước pipeline (out/logs/steps.tsv do pipeline.sh ghi)."""
+    tsv = ROOT / 'out' / 'logs' / 'steps.tsv'
+    if not tsv.exists():
+        return []
+    L = ['### ⏱️ Thời gian từng bước', '', '| Bước | Giây |', '|---|---|']
+    for line in tsv.read_text(encoding='utf-8').splitlines():
+        name, _, sec = line.partition('\t')
+        if name:
+            L.append(f"| {name} | {sec} |")
+    return L + ['']
+
+
 def body(base):
     steps = json.loads((ROOT / 'out' / 'ui' / 'result.json').read_text(encoding='utf-8'))
     ok, bad = sum(s['ok'] for s in steps), sum(not s['ok'] for s in steps)
@@ -71,6 +113,7 @@ def body(base):
             if s['shot']:
                 L.append(f'  <br><img src="{base}/{s["shot"]}?raw=true" width="560">')
         L += ['', '</details>', '']
+    L += changes_section() + timing_section()
     return '\n'.join(L)
 
 

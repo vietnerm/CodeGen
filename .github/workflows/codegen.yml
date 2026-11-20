@@ -58,6 +58,20 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
 
+      # PR-16: cache theo G (phần nền sinh code) — G đổi thì key mới, cache rỗng ⇒ mvn chạy lại.
+      # Trong .cache chỉ có state + jar dựng trước: pipeline tự kiểm sha nguồn Java trước khi
+      # tin, nên cache lệch cũ cũng không chạy sai — chỉ chậm hơn.
+      - name: Dấu vân tay phần nền (G) — key cache build
+        id: gfp
+        run: echo "G=$(python generator.py ghash)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: codegen-${{ steps.gfp.outputs.G }}-${{ github.event.pull_request.base.sha || github.sha }}
+          restore-keys: |
+            codegen-${{ steps.gfp.outputs.G }}-
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -85,6 +99,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BASE_REF: origin/${{ github.base_ref }}   # cho bảng FID thay đổi trong comment
         run: python scripts/publish_ui.py --target ${{ github.event.pull_request.number }} --label pr-${{ github.event.pull_request.number }}
 
       - name: Lưu kết quả
