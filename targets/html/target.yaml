@@ -1,7 +1,13 @@
 name: html
 kind: shared
 ir_versions: ["1."]
-description: Trang CRUD chuẩn (Tabler) dựng từ meta của api module bằng core/page.js
+description: >
+  Khung web thống nhất (shell): index.html gọi core/js/shell.js — sidebar menu cây + navbar + vùng
+  nội dung nạp renderCrudPage theo hash router. /pages/<FID>.html chỉ còn redirect về /index.html#/<FID>.
 outputs:
   - {template: page.html.j2,  path: "web/pages/{fid}.html", scope: function}
   - {template: index.html.j2, path: web/index.html, scope: project}
+copy:
+  # Nguồn repo: được chép TRƯỚC (render.py ưu tiên) — giữ nguyên thứ tự để tránh lỗi trang trắng cũ
+  - {from: "repo:core/css", to: web/css}
+  - {from: "repo:core/static/vendor", to: web/vendor}

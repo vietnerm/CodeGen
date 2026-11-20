@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -85,6 +86,12 @@ def main():
         sys.exit(1)
     if args.command == 'validate':
         return
+    # UI_LAYOUT: môi trường đè ui.layout khi sinh lại (pipeline dùng để test layout thứ hai)
+    env_layout = os.environ.get('UI_LAYOUT')
+    if env_layout:
+        if env_layout not in model.UI_LAYOUTS:
+            sys.exit(f"UI_LAYOUT không hợp lệ: {env_layout} (chỉ {sorted(model.UI_LAYOUTS)})")
+        ir['project']['ui']['layout'] = env_layout
     if args.command == 'ir':
         print(json.dumps(ir, ensure_ascii=False, indent=2, default=str))
         return
