@@ -158,8 +158,14 @@ def main():
         body = [f"🤖 **Chức năng mới `{fid}`**{chosen}", '', '### Ngữ cảnh AI đã dùng (tìm trong IR)', md_context(used or ctx), '']
         trace = [x for x in logs if x.startswith('model trích')]
         if trace:
-            body += ['<details><summary>Model đã trích</summary>', '', *[f"- lần {i}: {t}" for i, t in enumerate(trace, 1)],
-                     '', '</details>', '']
+            lines, n = [], 0
+            for t in trace:
+                if t.startswith('model trích — điều chỉnh: '):
+                    lines.append(f"  - ↳ {t.removeprefix('model trích — điều chỉnh: ')}")
+                else:
+                    n += 1
+                    lines.append(f"- lần {n}: {t.removeprefix('model trích ')}")
+            body += ['<details><summary>Model đã trích</summary>', '', *lines, '', '</details>', '']
         if ok:
             new_ir, _ = model.build_ir(ROOT / 'spec')
             imp = ai.impact(new_ir, fid)
