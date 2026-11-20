@@ -75,7 +75,12 @@ async function detailTable(d, rows) {
     h('button', { type: 'button', class: 'btn btn-sm', 'data-action': `add-line-${d.as}`, onclick: () => addRow() }, '+ Thêm dòng'));
 }
 
-export async function renderCrudPage(root, api) {
+/** Trang CRUD: tìm kiếm + bảng + form dựng từ meta.
+ *  opts.rights: right_mask của user với chức năng này (menu trả về) — thiếu W ẩn nút
+ *  tạo/sửa, thiếu D ẩn nút xoá (giữ nguyên data-action cho test). Bỏ qua = đầy đủ (trang cũ). */
+export async function renderCrudPage(root, api, opts = {}) {
+  const rights = opts.rights == null ? 7 : opts.rights;   // R=1 W=2 D=4 — hợp đồng core
+  const can = { w: (rights & 2) !== 0, d: (rights & 4) !== 0 };
   const meta = api.meta;
   const state = { page: 0, size: 20, filters: {}, editing: null };
   const msg = h('div');
@@ -97,8 +102,8 @@ export async function renderCrudPage(root, api) {
         h('tbody', {}, r.items.map((row) => h('tr', { 'data-key': meta.pk.map((k) => row[k]).join('/') },
           meta.list.map((n) => h('td', {}, String(row[n] ?? ''))),
           h('td', { class: 'text-end' },
-            h('button', { class: 'btn btn-sm', 'data-action': 'edit', onclick: () => edit(row) }, 'Sửa'), ' ',
-            h('button', { class: 'btn btn-sm btn-outline-danger', 'data-action': 'delete', onclick: () => remove(row) }, 'Xoá'))))));
+            ...(can.w ? [h('button', { class: 'btn btn-sm', 'data-action': 'edit', onclick: () => edit(row) }, 'Sửa')] : []),
+            ...(can.d ? [h('button', { class: 'btn btn-sm btn-outline-danger', 'data-action': 'delete', onclick: () => remove(row) }, 'Xoá')] : []))))));
       pager.replaceChildren(h('span', { 'data-total': r.total }, `Tổng ${r.total} · trang ${r.page + 1}`), h('div', { class: 'ms-auto' },
         h('button', { class: 'btn btn-sm', 'data-action': 'prev', disabled: state.page === 0, onclick: () => { state.page--; load(); } }, '‹'),
         h('button', { class: 'btn btn-sm', 'data-action': 'next', disabled: (state.page + 1) * state.size >= r.total,
@@ -155,8 +160,9 @@ export async function renderCrudPage(root, api) {
       }
       return h('div', { class: 'col-md-3' }, el);
     })),
-    h('div', { class: 'col-auto' }, h('button', { class: 'btn', type: 'submit', 'data-action': 'search' }, 'Tìm'), ' ',
-      h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'create', onclick: () => edit(null) }, 'Tạo mới')));
+    h('div', { class: 'col-auto' }, h('button', { class: 'btn', type: 'submit', 'data-action': 'search' }, 'Tìm'),
+      ...(can.w ? [' ', h('button', { class: 'btn btn-primary', type: 'button', 'data-action': 'create',
+        onclick: () => edit(null) }, 'Tạo mới')] : [])));
   search.addEventListener('submit', (ev) => {
     ev.preventDefault();
     state.filters = Object.fromEntries(meta.search.map((n) => [n, search.elements[n].value || undefined]));
