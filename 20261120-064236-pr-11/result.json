@@ -1,0 +1,317 @@
+[
+  {
+    "function": "ATA0_0110",
+    "step": "đăng nhập, mở trang danh sách",
+    "ok": true,
+    "shot": "ATA0_0110/01-danh-sach.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "điền form tạo mới",
+    "ok": true,
+    "shot": "ATA0_0110/02-form-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "tạo xong, dòng mới hiện trong danh sách",
+    "ok": true,
+    "shot": "ATA0_0110/03-da-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "dữ liệu lưu đúng (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "{}"
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "tạo trùng khoá → hiện lỗi E_DUPLICATE",
+    "ok": true,
+    "shot": "ATA0_0110/04-loi-trung-khoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "sửa device_name",
+    "ok": true,
+    "shot": "ATA0_0110/05-form-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "sửa xong, danh sách cập nhật",
+    "ok": true,
+    "shot": "ATA0_0110/06-da-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "giá trị sửa đã lưu (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "ATM Hội sở (sửa UI)"
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "xoá xong, dòng biến mất",
+    "ok": true,
+    "shot": "ATA0_0110/07-da-xoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "đã xoá (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "đăng nhập, mở trang danh sách",
+    "ok": true,
+    "shot": "ATA0_0120/01-danh-sach.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "điền form tạo mới + dòng chi tiết",
+    "ok": true,
+    "shot": "ATA0_0120/02-form-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "tạo xong, dòng mới hiện trong danh sách",
+    "ok": true,
+    "shot": "ATA0_0120/03-da-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "dữ liệu lưu đúng (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "{}"
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "lưu kèm 1 dòng payments",
+    "ok": true,
+    "shot": null,
+    "info": "[{'contract_no': 'HD000001', 'seq': 1, 'due_date': '2026-03-31', 'amount': 30000000.0, 'paid': 'N', 'note': 'Kỳ 1', 'owner_unit': 'HN01', 'create_id': 'maker1', 'create_dt': '2026-11-20T06:42:33.368913Z', 'update_id': 'maker1', 'update_dt': '2026-11-20T06:42:33.368913Z', 'row_version': 0, 'vendor_na"
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "tạo trùng khoá → hiện lỗi E_DUPLICATE",
+    "ok": true,
+    "shot": "ATA0_0120/04-loi-trung-khoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "sửa vendor_name",
+    "ok": true,
+    "shot": "ATA0_0120/05-form-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "sửa xong, danh sách cập nhật",
+    "ok": true,
+    "shot": "ATA0_0120/06-da-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "giá trị sửa đã lưu (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "Công ty Bảo trì A (sửa UI)"
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "xoá xong, dòng biến mất",
+    "ok": true,
+    "shot": "ATA0_0120/07-da-xoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "đã xoá (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "đăng nhập, mở trang danh sách",
+    "ok": true,
+    "shot": "ATA0_0121/01-danh-sach.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "điền form tạo mới",
+    "ok": true,
+    "shot": "ATA0_0121/02-form-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "tạo xong, dòng mới hiện trong danh sách",
+    "ok": true,
+    "shot": "ATA0_0121/03-da-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "dữ liệu lưu đúng (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "{}"
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "tạo trùng khoá → hiện lỗi E_DUPLICATE",
+    "ok": true,
+    "shot": "ATA0_0121/04-loi-trung-khoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "sửa note",
+    "ok": true,
+    "shot": "ATA0_0121/05-form-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "sửa xong, danh sách cập nhật",
+    "ok": true,
+    "shot": "ATA0_0121/06-da-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "giá trị sửa đã lưu (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "Kỳ 1 (sửa UI)"
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "xoá xong, dòng biến mất",
+    "ok": true,
+    "shot": "ATA0_0121/07-da-xoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "đã xoá (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "đăng nhập, mở trang danh sách",
+    "ok": true,
+    "shot": "ATA0_0131/01-danh-sach.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "điền form tạo mới",
+    "ok": true,
+    "shot": "ATA0_0131/02-form-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "tạo xong, dòng mới hiện trong danh sách",
+    "ok": true,
+    "shot": "ATA0_0131/03-da-tao.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "dữ liệu lưu đúng (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "{}"
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "tạo trùng khoá → hiện lỗi E_DUPLICATE",
+    "ok": true,
+    "shot": "ATA0_0131/04-loi-trung-khoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "sửa service_person",
+    "ok": true,
+    "shot": "ATA0_0131/05-form-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "sửa xong, danh sách cập nhật",
+    "ok": true,
+    "shot": "ATA0_0131/06-da-sua.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "giá trị sửa đã lưu (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": "Nguyễn Văn A (sửa UI)"
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "xoá xong, dòng biến mất",
+    "ok": true,
+    "shot": "ATA0_0131/07-da-xoa.png",
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "đã xoá (kiểm qua API)",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  }
+]
