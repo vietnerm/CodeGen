@@ -1,0 +1,42 @@
+# Bộ đáp án cho thử nghiệm Laya: mỗi ý trong mô tả → trường nào của spec (none = không phải trường: luật, ràng buộc xoá…).
+# Engine tự sinh thêm biến thể "bỏ trường đúng khỏi danh sách" → đáp án none (= phát hiện trường bị sót).
+cases:
+  - function: ATA0_0110
+    clauses:
+      - {text: "mã thiết bị (chữ hoa/số 4-20 ký tự)", field: device_id}
+      - {text: "tên thiết bị, tìm gần đúng", field: device_name}
+      - {text: "loại thiết bị theo DEVICE_TYPE", field: device_type}
+      - {text: "ngày lắp đặt (có thể trống)", field: install_date}
+      - {text: "hạn mức tiền mặt", field: cash_limit}
+      - {text: "trạng thái A/I", field: status}
+      - {text: "Luật: ngày lắp đặt không được ở tương lai", field: none}
+  - function: ATA0_0120
+    clauses:
+      - {text: "số hợp đồng dạng HD kèm 6 chữ số", field: contract_no}
+      - {text: "thiết bị được bảo trì", field: device_id}
+      - {text: "tên công ty nhà cung cấp dịch vụ", field: vendor_name}
+      - {text: "ngày bắt đầu hiệu lực", field: start_date}
+      - {text: "ngày hết hạn hợp đồng", field: end_date}
+      - {text: "giá trị hợp đồng", field: amount}
+      - {text: "loại tiền tệ thanh toán", field: currency}
+      - {text: "tình trạng còn hiệu lực hay không", field: status}
+      - {text: "ngày kết thúc phải sau hoặc bằng ngày bắt đầu", field: none}
+  - function: ATA0_0131            # issue #4 (spec PR #8 sau khi sửa)
+    fields:
+      - {name: service_id, label: Mã lần bảo dưỡng}
+      - {name: device_id, label: Thiết bị}
+      - {name: service_date, label: Ngày dự kiến}
+      - {name: actual_date, label: Ngày thực hiện}
+      - {name: service_person, label: Người thực hiện}
+      - {name: note, label: Ghi chú}
+      - {name: status, label: Trạng thái}
+    clauses:
+      - {text: "mã lần bảo dưỡng (BD + 4-18 chữ số, vd BD0001)", field: service_id}
+      - {text: "thiết bị (tham chiếu thiết bị ATM, hiện tên thiết bị)", field: device_id}
+      - {text: "ngày dự kiến", field: service_date}
+      - {text: "ngày thực hiện (có thể trống)", field: actual_date}
+      - {text: "người thực hiện (tối đa 100 ký tự, tìm kiếm gần đúng)", field: service_person}
+      - {text: "ghi chú (tối đa 500 ký tự, có thể trống)", field: note}
+      - {text: "trạng thái A/I", field: status}
+      - {text: "Không xoá được thiết bị khi còn lịch bảo dưỡng", field: none}
+      - {text: "Luật: ngày thực hiện không được trước ngày dự kiến", field: none}
