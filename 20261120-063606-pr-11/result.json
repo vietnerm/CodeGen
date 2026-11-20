@@ -1,0 +1,58 @@
+[
+  {
+    "function": "ATA0_0110",
+    "step": "bước giao diện bị kẹt",
+    "ok": false,
+    "shot": "ATA0_0110/01-loi.png",
+    "info": "Locator.fill: Timeout 15000ms exceeded."
+  },
+  {
+    "function": "ATA0_0110",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "bước giao diện bị kẹt",
+    "ok": false,
+    "shot": "ATA0_0120/01-loi.png",
+    "info": "Locator.fill: Timeout 15000ms exceeded."
+  },
+  {
+    "function": "ATA0_0120",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "bước giao diện bị kẹt",
+    "ok": false,
+    "shot": "ATA0_0121/01-loi.png",
+    "info": "Locator.fill: Timeout 15000ms exceeded."
+  },
+  {
+    "function": "ATA0_0121",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "bước giao diện bị kẹt",
+    "ok": false,
+    "shot": "ATA0_0131/01-loi.png",
+    "info": "Locator.fill: Timeout 15000ms exceeded."
+  },
+  {
+    "function": "ATA0_0131",
+    "step": "không có lỗi JavaScript trên trang",
+    "ok": true,
+    "shot": null,
+    "info": ""
+  }
+]
