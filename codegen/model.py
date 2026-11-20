@@ -130,8 +130,8 @@ def _field(f: dict, where: str, rep: Report, codemaps: dict, from_profile=False)
         rep.err(w, f"default {default!r} không thuộc enum")
     if f.get('search') not in (None, 'eq', 'like'):
         rep.err(w, "search phải là eq | like")
-    if f.get('search') == 'like' and t != 'TEXT':
-        rep.err(w, "search: like chỉ cho TEXT")
+    if f.get('search') and t != 'TEXT':
+        rep.err(w, "search chỉ cho cột TEXT (API nhận tham số tìm kiếm dạng chuỗi)")
     system = bool(f.get('system', False))
     nullable = bool(f.get('nullable', False))
     ex = f.get('example')
