@@ -43,5 +43,5 @@ Cùng một pipeline chạy 2 lần liên tiếp, không sửa gì giữa hai l�
 
 | Môi trường | mvn thật (s) | bỏ qua mvn (s) | Ghi chú |
 |---|---|---|---|
-| CI ubuntu-latest · PostgreSQL | 13 | _(chờ run có .cache)_ | run 44724125899 · G tất định sau commit 48d9242 |
-| CI ubuntu-latest · MySQL | 10 | _(chờ run có .cache)_ | run 44724125899 · sai lệch 3–4s giữa các run là bình thường |
+| CI ubuntu-latest · PostgreSQL | 13 | _(chờ run có .cache v2)_ | run 44726629010 · G key = G state = f950da74…, tất định |
+| CI ubuntu-latest · MySQL | 11 | _(chờ run có .cache v2)_ | run 44726629010 · sai lệch 2–3s giữa các run là bình thường |
