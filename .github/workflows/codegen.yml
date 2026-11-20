@@ -11,7 +11,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write          # đẩy ảnh test giao diện lên nhánh ui-screenshots
+  pull-requests: write     # comment ảnh vào PR
 
 concurrency:
   group: codegen-${{ github.ref }}
@@ -66,12 +67,25 @@ jobs:
       - name: Cài thư viện Python
         run: pip install -r requirements.txt -r requirements-ci.txt
 
+      - name: Cài trình duyệt cho test giao diện
+        run: python -m playwright install --with-deps chromium
+
       - name: Guard PR do AI tạo (nhánh ai/*)
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'ai/')
         run: GUARD_BASE=origin/${{ github.base_ref }} python scripts/guard.py
 
       - name: Pipeline (${{ matrix.db }})
         run: bash scripts/pipeline.sh
+
+      - name: Đăng ảnh test giao diện vào PR
+        if: >-
+          always() && matrix.db == 'postgresql' && github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && hashFiles('out/ui/result.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python scripts/publish_ui.py --target ${{ github.event.pull_request.number }} --label pr-${{ github.event.pull_request.number }}
 
       - name: Lưu kết quả
         if: always()
@@ -82,5 +96,6 @@ jobs:
             out/openapi/
             out/docs/
             out/logs/
+            out/ui/
             out/app/target/app.jar
           if-no-files-found: warn

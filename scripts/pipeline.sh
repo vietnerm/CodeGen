@@ -7,6 +7,7 @@
 #   APP_JWT_SECRET=$(openssl rand -hex 32) bash scripts/pipeline.sh
 #
 # Biến tuỳ chọn: PORT (8080) · SKIP_BUILD=1 (bỏ mvn, dùng jar có sẵn) · SKIP_APP=1 (dừng sau bước SQL)
+#                SKIP_UI=1 (bỏ test giao diện; mặc định chạy nếu đã cài playwright)
 #                KEEP_RUNNING=1 (không tắt app sau test)
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
@@ -73,6 +74,15 @@ APP_PID=$!
 trap '[ "${KEEP_RUNNING:-0}" = 1 ] || kill $APP_PID 2>/dev/null || true' EXIT
 if ! BASE_URL="http://localhost:$PORT" python out/tests/http/run_all.py; then
   echo "── 80 dòng cuối app.log ──"; tail -80 out/logs/app.log; exit 1
+fi
+
+if [ "${SKIP_UI:-0}" != 1 ] && python -c "import playwright" 2>/dev/null; then
+  step "6b. Test giao diện (Playwright) + chụp màn hình → out/ui/"
+  if ! BASE_URL="http://localhost:$PORT" python out/tests/ui/run_ui.py; then
+    echo "── xem ảnh trong out/ui/ ──"; cat out/ui/report.md 2>/dev/null | head -60; exit 1
+  fi
+else
+  echo "(bỏ qua test giao diện: SKIP_UI=1 hoặc chưa cài playwright)"
 fi
 
 step "7. Toàn vẹn dữ liệu sau test"

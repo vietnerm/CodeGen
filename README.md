@@ -48,6 +48,18 @@ Các bước của `pipeline.sh`: sinh → guard → dựng DB (schema, seed, te
 
 CI (`.github/workflows/codegen.yml`): mỗi push/PR và 02:17 hằng ngày, ma trận **PostgreSQL + MySQL**.
 
+## Test giao diện có chụp màn hình
+
+`core/tests/ui/run_ui.py` (Playwright, Chromium headless) chạy sau test API trong `pipeline.sh` — với MỌI chức năng:
+đăng nhập → danh sách → form tạo (kèm dòng chi tiết nếu có master–detail) → tạo → lỗi trùng khoá → sửa → xoá,
+mỗi bước 1 ảnh và đối chiếu lại qua API. Selector lấy tất định từ metadata (`name` = tên cột, `data-action`,
+`data-key`, `data-form` do `core/js/page.js` gắn) — không đoán theo chữ hiển thị.
+
+- Ảnh: `out/ui/<FID>/NN-buoc.png`, báo cáo `out/ui/report.md` (artifact của CI)
+- PR (và issue/PR do AI tạo): ảnh được đẩy lên nhánh `ui-screenshots` (giữ 30 lần gần nhất) và bot cập nhật
+  **một** comment có ảnh từng bước — người duyệt xem giao diện ngay trong PR
+- `SKIP_UI=1` để bỏ qua khi chạy tay
+
 ## Thêm 1 chức năng
 
 1. Tạo `spec/AT/A0/ATA0_0130.yaml` (xem `ATA0_0110.yaml`; schema: `schema/function-spec.schema.json`)
