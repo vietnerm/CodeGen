@@ -123,7 +123,7 @@ jobs:
         if: steps.ai.outputs.action == 'analysis'
         run: gh issue edit "$ISSUE" --add-label needs-human
 
-      - name: Commit spec (chưa push)
+      - name: Commit spec + hook (chưa push)
         if: steps.ai.outputs.action == 'spec' && steps.ai.outputs.ok == 'true'
         env:
           FID: ${{ steps.ai.outputs.fid }}
@@ -132,8 +132,8 @@ jobs:
           git config user.name "codegen-bot"
           git config user.email "codegen-bot@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add spec/
-          git commit -m "spec($FID): AI tạo từ issue #$ISSUE"
+          git add spec/ custom/          # custom/ = thân hook do ai_hook.py viết (nếu issue nêu luật)
+          git commit -m "spec($FID): AI tạo từ issue #$ISSUE (kèm hook nếu có luật)"
 
       - name: Guard chế độ bot
         if: steps.ai.outputs.action == 'spec' && steps.ai.outputs.ok == 'true'

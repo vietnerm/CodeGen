@@ -12,6 +12,8 @@ public class ATA0_0131_hookImpl implements ATA0_0131_hook {
     /** VALIDATE · CREATE, UPDATE — Ngày thực hiện không được trước ngày dự kiến */
     @Override
     public void validateActualDate(Ctx ctx, String action, ATA0_0131_dto dto, Errors errors) {
-        // TODO: Ngày thực hiện không được trước ngày dự kiến
+        if (dto.actualDate() != null && dto.serviceDate() != null && dto.actualDate().isBefore(dto.serviceDate())) {
+            errors.add("actual_date", "E_RULE", "Ngày thực hiện không được trước ngày dự kiến");
+        }
     }
 }
