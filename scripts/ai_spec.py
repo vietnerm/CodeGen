@@ -88,7 +88,19 @@ def extract_schema(ir):
                                      'properties': {'name': {'type': 'string'}, 'description': {'type': 'string'}}}}}}
 
 
-def compose(ir, facts, fid, parent, module, schema_name):
+KEY_WORDS = {'id', 'code', 'no', 'ma', 'so', 'key'}
+
+
+def plausible_ref(x, pe, pf):
+    """Model nhỏ hay gắn ref bừa. Chỉ nhận khi tên/nhãn trường có điểm chung với bảng cha."""
+    if x['name'] == pf['name']:
+        return True
+    mine = ai.tokens(f"{x['name']} {x.get('label', '')}") - KEY_WORDS
+    theirs = ai.tokens(f"{pe['name']} {pe['label']} {pf['name']} {pf['label']}") - KEY_WORDS
+    return bool(mine & theirs)
+
+
+def compose(ir, facts, fid, parent, module, schema_name, notes=None):
     """Ghép spec ĐẦY ĐỦ một cách tất định từ danh sách trường model trích ra."""
     fns = {f['id']: f for f in ir['functions']}
     ents = {e['id']: e for e in ir['entities']}
@@ -105,7 +117,11 @@ def compose(ir, facts, fid, parent, module, schema_name):
         ex = x.get('example')
         ref = x.get('ref')
         pe = ents.get(fns[ref]['entity']) if ref in fns and fns[ref]['entity'] else None
-        if pe and len(pe['pk_fields']) == 1:                      # tham chiếu: lấy đúng kiểu/độ dài khoá cha
+        if pe and (len(pe['pk_fields']) != 1 or not plausible_ref(x, pe, pe['pk_fields'][0])):
+            if notes is not None:
+                notes.append(f"bỏ tham chiếu {n} → {ref} ({pe['label']}): không khớp tên/khoá bảng cha")
+            pe = None
+        if pe:                      # tham chiếu: lấy đúng kiểu/độ dài khoá cha
             pf = pe['pk_fields'][0]
             f['type'] = pf['type']
             if pf['length']:
@@ -239,7 +255,10 @@ def generate(fid, request, parent='', log=print):
             log(f"model trích {len(facts.get('fields', []))} trường: " + ', '.join(
                 f"{x.get('name')}({x.get('type')}{', ref ' + x['ref'] if x.get('ref') else ''})"
                 for x in facts.get('fields', [])) + (f"; luật: {len(facts.get('rules') or [])}" if facts.get('rules') else ''))
-            spec = compose(ir, facts, fid, parent, module, schema_name)
+            notes = []
+            spec = compose(ir, facts, fid, parent, module, schema_name, notes)
+            for nt in notes:
+                log(f"model trích — điều chỉnh: {nt}")
         except (ValueError, KeyError, TypeError) as e:
             err = f"JSON lỗi: {e}"
         else:
