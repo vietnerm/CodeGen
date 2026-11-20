@@ -1,8 +1,9 @@
 # CodeGen
 
 Sinh dự án từ **spec theo mã hệ thống** (SYS/SUB/FUNCTION). Mỗi ngày CI sinh → kiểm → build → chạy → test.
-AI nhỏ chỉ viết **spec** (bị ép đúng JSON schema) và **hook nghiệp vụ nhỏ**; mọi code CRUD, SQL, API,
-OpenAPI, tài liệu, JS SDK, trang, test đều sinh tất định từ template — không thể lệch chuẩn.
+AI nhỏ viết **spec**, **thân hook nghiệp vụ nhỏ** và **patch sửa nhỏ cho issue change/bug** (đều bị ép schema
+JSON, chạy lại pipeline); mọi code CRUD, SQL, API, OpenAPI, tài liệu, JS SDK, khung web, test đều sinh
+tất định từ template — không thể lệch chuẩn.
 
 ```
 spec YAML ──validate──▶ IR (JSON, có version) ──▶ target pack ──▶ out/
@@ -23,7 +24,7 @@ spec YAML ──validate──▶ IR (JSON, có version) ──▶ target pack �
 | `spec/<SYS>/<SUB>/<FID>.yaml` | **AI / dev** | 1 file = 1 chức năng CRUD |
 | `custom/java/**/<FID>_hookImpl.java` | **AI / dev** | luật nghiệp vụ riêng (sinh khung 1 lần, không bị ghi đè) |
 | `core/java` | kiến trúc sư | `devhub-core`: JWT, quyền R/W/D/X, Sql (FlowSQL), CODEMAP, lỗi, audit |
-| `core/js` | kiến trúc sư | `core.js` (gọi API, token, codemap cache), `page.js` (trang CRUD từ meta) |
+| `core/js`, `core/css` | kiến trúc sư | `core.js` (gọi API, token, codemap cache), `page.js` (trang CRUD từ meta), `shell.js` (khung web thống nhất) + `layout.css` |
 | `core/sql/core.sql` | kiến trúc sư | SQL của core — cùng lint/chuyển dialect như SQL sinh ra |
 | `core/tests/http` | kiến trúc sư | bộ test core contract + CRUD (Python stdlib) |
 | `targets/<tên>/` | kiến trúc sư | target pack: `target.yaml` + `types.yaml` + `templates/` + `build.py` |
@@ -44,18 +45,43 @@ APP_JWT_SECRET=$(openssl rand -hex 32) bash scripts/pipeline.sh
 ```
 
 Các bước của `pipeline.sh`: sinh → guard → dựng DB (schema, seed, test data) → kiểm toàn vẹn →
-**chạy thật mọi câu SQL trong catalog** → build core + app → chạy app → test HTTP → kiểm toàn vẹn lần nữa.
+**chạy thật mọi câu SQL trong catalog** → build core + app → chạy app → test HTTP → test giao diện
+(shell + bấm menu) → lượt rút gọn layout thứ hai (PostgreSQL) → kiểm toàn vẹn lần nữa.
 
 CI (`.github/workflows/codegen.yml`): mỗi push/PR và 02:17 hằng ngày, ma trận **PostgreSQL + MySQL**.
+
+## Khung web thống nhất (shell)
+
+Sau đăng nhập là **một shell** (`core/js/shell.js`): sidebar dọc menu cây nhiều cấp (đúng `_menu.yaml` + quyền R
+theo tenant từ `GET /api/v1/menu`) + navbar + vùng nội dung. Bấm chức năng → router hash `#/<FID>` import
+`js/api/<FID>.js` và nạp trang CRUD (`renderCrudPage`) vào vùng nội dung, không chuyển trang; có breadcrumb
+theo đường đi cây, ô lọc menu bỏ dấu, nhớ nhóm đang mở, trang chào + chức năng gần đây; `/pages/<FID>.html`
+chỉ redirect về hash (link cũ không gãy). User chỉ có quyền R thấy menu nhưng không có nút tạo/sửa/xoá.
+
+Layout chọn trong `spec/_project.yaml` → `ui:` — **đổi 1 dòng → sinh lại, không sửa JS**:
+
+```yaml
+ui:
+  layout: vertical-floating      # vertical-floating: navbar card tách mép · vertical-transparent: navbar trong suốt, cuộn thì nền mờ
+  theme: light                   # light | dark
+  brand: DevHub
+```
+
+≥992px sidebar mở; <992px thành off-canvas với nút ☰. Tabler + icons webfont được **vendor vào
+`core/static/vendor/`** (ghi version trong tên thư mục) — chạy offline, không phụ thuộc CDN.
 
 ## Test giao diện có chụp màn hình
 
 `core/tests/ui/run_ui.py` (Playwright, Chromium headless) chạy sau test API trong `pipeline.sh` — với MỌI chức năng:
-đăng nhập → danh sách → form tạo (kèm dòng chi tiết nếu có master–detail) → tạo → lỗi trùng khoá → sửa → xoá,
-mỗi bước 1 ảnh và đối chiếu lại qua API. Selector lấy tất định từ metadata (`name` = tên cột, `data-action`,
-`data-key`, `data-form` do `core/js/page.js` gắn) — không đoán theo chữ hiển thị.
+đăng nhập ở `/index.html` (chụp `00-shell.png`) → **bấm menu** mở chức năng (mở nhóm cha trước, từ cây menu thật
+`GET /api/v1/menu`) → kiểm `aria-current` + breadcrumb → danh sách → form tạo (kèm dòng chi tiết nếu có
+master–detail) → tạo → lỗi trùng khoá → sửa → xoá, mỗi bước 1 ảnh và đối chiếu lại qua API. Thêm: viewer chỉ R
+không có nút ghi; tenant T2 thấy codemap riêng trên UI; `#/KHONG_TON_TAI` → E_FORBIDDEN không import.
+Selector lấy tất định từ metadata (`name` = tên cột, `data-menu`, `data-action`, `data-key`, `data-form`,
+`data-breadcrumb` do `shell.js`/`page.js` gắn) — không đoán theo chữ hiển thị.
 
-- Ảnh: `out/ui/<FID>/NN-buoc.png`, báo cáo `out/ui/report.md` (artifact của CI)
+- Ảnh: `out/ui/<FID>/NN-buoc.png`, báo cáo `out/ui/report.md` (artifact của CI); lượt rút gọn layout thứ hai
+  (`UI_LAYOUT` đè khi sinh) nằm ở `out/ui/<layout>/` và được gộp vào cùng comment để duyệt cả 2 layout
 - PR (và issue/PR do AI tạo): ảnh được đẩy lên nhánh `ui-screenshots` (giữ 30 lần gần nhất) và bot cập nhật
   **một** comment có ảnh từng bước — người duyệt xem giao diện ngay trong PR
 - `SKIP_UI=1` để bỏ qua khi chạy tay
@@ -66,8 +92,18 @@ mỗi bước 1 ảnh và đối chiếu lại qua API. Selector lấy tất đ�
    — hoặc để AI làm: Actions → **ai-spec** → Run workflow (mô tả tiếng Việt → spec → chạy toàn bộ
    pipeline → đạt thì mở PR nhánh `ai/*`). Cần bật *Settings → Actions → General → Allow GitHub Actions
    to create and approve pull requests*; thêm secret `CODEGEN_BOT_TOKEN` nếu muốn PR đó chạy cả CI `codegen`.
-2. `python generator.py build` → sinh `custom/…/ATA0_0130_hookImpl.java` nếu có hook; viết luật vào đó.
-3. Khai báo test cho hook trong spec (`tests:`) — engine test chạy chung.
+2. `python generator.py build` → sinh `custom/…/ATA0_0130_hookImpl.java` nếu có hook; hook mô tả luật bằng văn bản
+   + test ngay trong spec, AI nhỏ viết thân qua `scripts/ai_hook.py` (compile + chạy test hook, tối đa 3 vòng):
+   ```yaml
+   hooks:
+     - name: validateActualDate
+       'on': [create, update]      # nháy bắt buộc: YAML 1.1 hiểu 'on' là bool
+       rule: Ngày thực hiện không được trước ngày dự kiến
+       tests:
+         - {input: {actual_date: '2026-05-09'}, error: {field: actual_date, code: E_RULE}}
+         - {input: {actual_date: '2026-05-10'}, ok: true}
+   ```
+3. Test hook sinh tất định vào engine HTTP (đúng như test khai báo ở `tests:` của function).
 4. PR → CI chạy toàn bộ pipeline + guard.
 
 API sinh ra cho mỗi function: `GET/POST {base}`, `GET/PUT/DELETE {base}/{pk}` với `base = /api/v1/<sys>/<sub>/<no>`.
@@ -105,17 +141,25 @@ chỉ nhận giá trị đang có); **code ghép spec đầy đủ tất định
 
 Tạo issue bằng form **🤖 AI: chức năng** (nhãn `ai`), workflow `ai-issue`:
 
-- **Chức năng mới** → tìm ngữ cảnh trong IR → AI viết spec → guard → pipeline đầy đủ → PR `Closes #N` + comment kết quả
-- **Sửa / Lỗi** → phân tích ảnh hưởng từ IR (bảng, quan hệ, lookup, master–detail, file sinh) → comment + nhãn `needs-human`
+- **Chức năng mới** → tìm ngữ cảnh trong IR → AI viết spec + **AI viết thân hook** (nếu nêu luật) → guard →
+  pipeline đầy đủ → PR `Closes #N` + comment kết quả (gồm **bảng ý trong issue ↔ trường/hook/quan hệ sinh ra**,
+  ý không khớp ghi ⚠️ chưa xử lý)
+- **Sửa / Lỗi** → AI trích **patch nhỏ** (thêm/sửa/xoá field, thêm lookup) áp vào spec giữ comment → validate
+  tối đa 3 vòng → đạt: pipeline + PR `spec(FID): AI sửa theo issue #N`; không đạt: phân tích ảnh hưởng
+  (bảng, quan hệ, lookup, master–detail, file sinh) → comment + nhãn `needs-human`. Cấm đổi pk, xoá entity,
+  sửa `_core.yaml`
 - Comment `/ai` để chạy lại. Chỉ chạy với OWNER/MEMBER/COLLABORATOR.
 
 ## Luật giữ chuẩn (tự động)
 
 - **sqlglot lint**: cấm `ON CONFLICT`, `RETURNING`, `ILIKE`, `= ANY`, toán tử JSON/mảng, `LIMIT`, DDL, `SELECT *`
   trong catalog — thao tác đặc thù DB đi qua API của core (`Dialect` cài theo DBType).
-- **guard** (`scripts/guard.py`, luật đọc từ `target.yaml`): hook không import `java.sql`, `java.net`, `flowsql`…;
-  JS sinh ra không gọi `fetch` trực tiếp; PR nhánh `ai/*` chỉ được sửa `spec/<SYS>/<SUB>/<FID>.yaml` và `*_hookImpl.java`.
-- **ai-spec**: output ép theo JSON schema + `generator.py validate`; sai thì đưa lỗi lại cho model (tối đa 3 lần).
+- **guard** (`scripts/guard.py`, luật đọc từ `target.yaml`): hook chỉ import được `Ctx/Errors/Conv/P` + `java.time`
+  + `@Component`, thân hook cấm SQL/IO/reflection; hook không import `java.sql`, `java.net`, `flowsql`…;
+  JS sinh ra không gọi `fetch` trực tiếp; PR nhánh `ai/*` chỉ được sửa `spec/<SYS>/<SUB>/<FID>.yaml` và
+  `*_hookImpl.java`.
+- **ai-spec / ai-hook / ai-change**: output ép theo JSON schema + `generator.py validate`; sai thì đưa lỗi lại
+  cho model (tối đa 3 lần); hook/change hỏng sau 3 vòng thì trả stub/spec gốc và ghi lý do vào PR.
 
 ## CODEMAP
 
