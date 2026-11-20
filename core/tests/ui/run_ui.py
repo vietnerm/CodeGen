@@ -82,6 +82,10 @@ def test_function(browser, run, fid):
     page.on('dialog', lambda d: d.accept())
     console_errors = []
     page.on('pageerror', lambda e: console_errors.append(str(e)))
+    page.on('console', lambda m: m.type == 'error' and not m.text.startswith('Failed to load resource')
+            and console_errors.append(m.text))                 # lỗi tải tài nguyên: xét riêng ở 'response'
+    page.on('response', lambda r: r.status >= 400 and r.url.startswith(api.BASE) and '/api/' not in r.url
+            and console_errors.append(f"{r.status} {r.url}"))  # file tĩnh của app hỏng (js/html…)
     n = 0
 
     def ok_shot(name, label):
@@ -162,7 +166,8 @@ def test_function(browser, run, fid):
         ok_shot('da-xoa', 'xoá xong, dòng biến mất')
         run.step(fid, 'đã xoá (kiểm qua API)', api.http('GET', path, token=tk).status == 404)
     except (PwTimeout, AssertionError) as e:
-        fail_shot('bước giao diện bị kẹt', str(e).splitlines()[0])
+        fail_shot('bước giao diện bị kẹt', str(e).splitlines()[0] + (f" | trang báo: {'; '.join(console_errors)[:200]}"
+                                                                     if console_errors else ''))
     run.step(fid, 'không có lỗi JavaScript trên trang', not console_errors, info='; '.join(console_errors))
     ctx.close()
 
