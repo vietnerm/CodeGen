@@ -107,6 +107,19 @@ def output(**kw):
                 f.write(f"{k}={v}\n")
 
 
+def strip_hook_tests(fid):
+    """Xoá `tests:` của mọi hook của fid khỏi spec — stub không thực thi luật thì test hook sẽ đỏ pipeline."""
+    import ai_hook
+    removed = []
+    new_ir, _ = model.build_ir(ROOT / 'spec')
+    fnx = next((f for f in new_ir['functions'] if f['id'] == fid), None)
+    for h in (fnx['hooks'] if fnx else []):
+        for sp in sorted((ROOT / 'spec').rglob(f'{fid}.yaml')):
+            if ai_hook.strip_hook_tests(sp, h['name']):
+                removed.append(h['name'])
+    return removed
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--issue', type=int)
@@ -167,10 +180,26 @@ def main():
                     lines.append(f"- lần {n}: {t.removeprefix('model trích ')}")
             body += ['<details><summary>Model đã trích</summary>', '', *lines, '', '</details>', '']
         if ok:
+            hook_note = 'không có hook'
+            try:
+                import ai_hook
+                hook_ok, hook_note = ai_hook.fill(fid, text or issue['title'],
+                                                  log=lambda m: logs.append(f"hook {m}"))
+            except Exception as e:                        # thiếu model/lỗi hạ tầng: giữ stub
+                hook_ok, hook_note = False, f'ai_hook lỗi hạ tầng: {e} — giữ stub'
+            if not hook_ok:
+                try:
+                    removed = strip_hook_tests(fid)
+                    if removed:
+                        hook_note += ' · đã xoá tests của hook ' + ', '.join(removed) + \
+                                     ' khỏi spec (stub không thực thi luật, test hook sẽ làm đỏ pipeline)'
+                except Exception:
+                    pass
             new_ir, _ = model.build_ir(ROOT / 'spec')
             imp = ai.impact(new_ir, fid)
-            body += ['### Spec đã sinh', f"`{dest.relative_to(ROOT)}`", '', md_impact(imp), '',
-                     '_Pipeline đầy đủ (sinh code, guard, build, chạy app, test HTTP) đang chạy — đạt thì PR sẽ được mở và liên kết ở đây._']
+            body += ['### Hook nghiệp vụ (nếu issue nêu luật)', hook_note, '', md_impact(imp), '',
+                     '_Pipeline đầy đủ (sinh code, guard, build, chạy app, test HTTP + test hook) đang chạy — '
+                     'đạt thì PR sẽ được mở và liên kết ở đây._']
         else:
             body += ['### Không sinh được spec hợp lệ', '```', '\n'.join(logs)[-3000:], '```',
                      'Bổ sung mô tả (trường, kiểu, ràng buộc, chức năng liên quan) rồi comment `/ai` để chạy lại.']

@@ -75,9 +75,10 @@ relations:
   lookup:
   - device_name
 hooks:
-- phase: VALIDATE
-  name: validateActualDate
-  actions:
-  - CREATE
-  - UPDATE
-  description: Ngày thực hiện không được trước ngày dự kiến
+- name: validateActualDate
+  'on': [create, update]   # nháy bắt buộc: YAML 1.1 hiểu 'on' là bool
+  rule: Ngày thực hiện không được trước ngày dự kiến
+  tests:
+  - {input: {service_id: BD9001, service_date: '2026-05-10', actual_date: '2026-05-09'},
+     error: {field: actual_date, code: E_RULE}}
+  - {input: {service_id: BD9002, service_date: '2026-05-10', actual_date: '2026-05-10'}, ok: true}

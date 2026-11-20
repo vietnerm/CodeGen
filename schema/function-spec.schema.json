@@ -241,9 +241,19 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "phase",
-          "name",
-          "description"
+          "name"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "description"
+            ]
+          },
+          {
+            "required": [
+              "rule"
+            ]
+          }
         ],
         "properties": {
           "phase": {
@@ -265,6 +275,55 @@
                 "UPDATE",
                 "DELETE"
               ]
+            }
+          },
+          "on": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "create",
+                "update",
+                "delete"
+              ]
+            }
+          },
+          "rule": {
+            "type": "string",
+            "description": "Luật nghiệp vụ bằng văn bản — AI nhỏ dùng làm yêu cầu viết thân hook"
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "input"
+              ],
+              "properties": {
+                "input": {
+                  "type": "object",
+                  "description": "Giá trị đè lên ví dụ của entity khi chạy test"
+                },
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "field",
+                    "code"
+                  ],
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "ok": {
+                  "type": "boolean"
+                }
+              }
             }
           },
           "description": {

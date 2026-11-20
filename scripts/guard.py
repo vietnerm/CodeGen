@@ -29,22 +29,38 @@ def targets():
         yield yaml.safe_load(t.read_text(encoding='utf-8'))
 
 
+# Hook nghiệp vụ là chỗ DUY NHẤT viết tay — vùng API cho phép hẹp nhất định (T2):
+# chỉ Ctx/Errors/Conv/P + java.time + @Component; CẤM SQL/IO/mạng/reflection trong cả import lẫn thân.
+RE_HOOK_IMPORT_OK = re.compile(
+    r'^(java\.time(\.[\w.]+)?|vn\.io\.devhub\.core\.(Ctx|Errors|Conv|P)(\.[\w.]+)?|'
+    r'org\.springframework\.stereotype\.Component)$')
+RE_HOOK_FORBIDDEN_BODY = re.compile(
+    r'\b(java\.sql|javax\.sql|java\.net|reflect|Class\.forName|Runtime|ProcessBuilder|System\.|'
+    r'Thread|Files|new\s+File|Socket|HttpClient|Statement|ResultSet|Connection|InputStream|OutputStream)\b')
+
+
 def check_java_hooks(forbidden):
     for p in sorted((ROOT / 'custom').rglob('*.java')):
         rel = p.relative_to(ROOT)
         src = p.read_text(encoding='utf-8')
-        for imp in re.findall(r'^\s*import\s+(?:static\s+)?([\w.]+)', src, re.M):
-            if any(imp == f or imp.startswith(f + '.') for f in forbidden):
-                errors.append(f"{rel}: import {imp} bị cấm — dùng API vn.io.devhub.core")
-        for bad in ('Class.forName', 'Runtime.getRuntime', 'ProcessBuilder', 'System.exit'):
-            if bad in src:
-                errors.append(f"{rel}: không được dùng {bad}")
         m = re.match(r'([A-Z]{2}[A-Z0-9]{2}_\d{4})_hookImpl\.java$', p.name)
         if not m:
             errors.append(f"{rel}: custom/ chỉ chứa <FUNCTION>_hookImpl.java")
             continue
         if not re.search(rf'class\s+{m.group(1)}_hookImpl\s+implements\s+{m.group(1)}_hook\b', src):
             errors.append(f"{rel}: phải là 'class {m.group(1)}_hookImpl implements {m.group(1)}_hook'")
+        for imp in re.findall(r'^\s*import\s+(?:static\s+)?([\w.]+)', src, re.M):
+            if any(imp == f or imp.startswith(f + '.') for f in forbidden):
+                errors.append(f"{rel}: import {imp} bị cấm — dùng API vn.io.devhub.core")
+            if not RE_HOOK_IMPORT_OK.match(imp):
+                errors.append(f"{rel}: import {imp} ngoài vùng cho phép hook — chỉ Ctx/Errors/Conv/P/java.time/Component")
+        bad_body = RE_HOOK_FORBIDDEN_BODY.search(re.sub(r'//[^\n]*', '', src))   # quét code thật, bỏ comment dòng
+        if bad_body:
+            errors.append(f"{rel}: hook chỉ được dùng Errors/Conv/P/java.time — thấy '{bad_body.group()}' "
+                          f"(cấm SQL/IO/reflection)")
+        for bad in ('Class.forName', 'Runtime.getRuntime', 'ProcessBuilder', 'System.exit'):
+            if bad in src:
+                errors.append(f"{rel}: không được dùng {bad}")
 
 
 def check_js(forbidden):
