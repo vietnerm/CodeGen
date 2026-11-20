@@ -51,7 +51,9 @@ CI (`.github/workflows/codegen.yml`): mỗi push/PR và 02:17 hằng ngày, ma t
 ## Thêm 1 chức năng
 
 1. Tạo `spec/AT/A0/ATA0_0130.yaml` (xem `ATA0_0110.yaml`; schema: `schema/function-spec.schema.json`)
-   — hoặc để AI làm: workflow **ai-spec** (mô tả tiếng Việt → spec → PR nhánh `ai/*`).
+   — hoặc để AI làm: Actions → **ai-spec** → Run workflow (mô tả tiếng Việt → spec → chạy toàn bộ
+   pipeline → đạt thì mở PR nhánh `ai/*`). Cần bật *Settings → Actions → General → Allow GitHub Actions
+   to create and approve pull requests*; thêm secret `CODEGEN_BOT_TOKEN` nếu muốn PR đó chạy cả CI `codegen`.
 2. `python generator.py build` → sinh `custom/…/ATA0_0130_hookImpl.java` nếu có hook; viết luật vào đó.
 3. Khai báo test cho hook trong spec (`tests:`) — engine test chạy chung.
 4. PR → CI chạy toàn bộ pipeline + guard.
