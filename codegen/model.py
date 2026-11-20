@@ -25,6 +25,9 @@ PHASES = {'VALIDATE', 'BEFORE_SAVE', 'AFTER_SAVE'}
 ON_DELETE = {'CASCADE', 'RESTRICT', 'NULLIFY'}
 FUNC_TYPES = {'MENU', 'BOTH', 'API'}
 REL_KEYS = {'child', 'cols', 'parent', 'parent_cols', 'on_delete', 'name', 'label', 'lookup', 'composition', 'as'}
+UI_LAYOUTS = {'vertical-floating', 'vertical-transparent'}   # shell: navbar tách mép | navbar trong suốt
+UI_THEMES = {'light', 'dark'}
+UI_KEYS = {'layout', 'theme', 'brand'}
 
 RE_FID = re.compile(r'^([A-Z]{2})([A-Z0-9]{2})_(\d{4})$')
 RE_MODULE = re.compile(r'^[A-Z]{2}[A-Z0-9]{2}$')
@@ -186,6 +189,25 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
             rep.err('_project.yaml', f"project.{k} bắt buộc")
     dialects = proj_doc.get('dialects') or ['postgresql']
     profiles = proj_doc.get('profiles') or {}
+
+    # ── ui: khung web thống nhất (shell) — giá trị sai báo lỗi ngay từ spec ──
+    ui = proj_doc.get('ui') or {}
+    if not isinstance(ui, dict):
+        rep.err('_project.yaml', 'ui: phải là dict (layout, theme, brand)')
+        ui = {}
+    for k in ui:
+        if k not in UI_KEYS:
+            rep.err('_project.yaml', f"ui: khoá không hỗ trợ {k!r} (chỉ {sorted(UI_KEYS)})")
+    brand = ui.get('brand')
+    if brand is not None and (not isinstance(brand, str) or not brand.strip()):
+        rep.err('_project.yaml', 'ui.brand phải là chuỗi không rỗng')
+    project_ui = {'layout': ui.get('layout') or 'vertical-floating',
+                  'theme': ui.get('theme') or 'light',
+                  'brand': brand or 'DevHub'}
+    if project_ui['layout'] not in UI_LAYOUTS:
+        rep.err('_project.yaml', f"ui.layout phải thuộc {sorted(UI_LAYOUTS)}: {project_ui['layout']!r}")
+    if project_ui['theme'] not in UI_THEMES:
+        rep.err('_project.yaml', f"ui.theme phải thuộc {sorted(UI_THEMES)}: {project_ui['theme']!r}")
 
     # ── codemap ──
     codemaps = {}
@@ -498,7 +520,8 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
 
     ir = {
         'ir_version': IR_VERSION,
-        'project': {**project, 'package_path': str(project.get('package', '')).replace('.', '/')},
+        'project': {**project, 'ui': project_ui,
+                    'package_path': str(project.get('package', '')).replace('.', '/')},
         'dialects': dialects,
         'targets': proj_doc.get('targets') or [],
         'codemaps': list(codemaps.values()),

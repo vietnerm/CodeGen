@@ -12,6 +12,16 @@ dialects: [postgresql, mysql]
 # Target chạy theo thứ tự. Backend của từng function chọn bằng `function.target` (mặc định java-spring).
 targets: [sql-postgresql, sql-mysql, sql-catalog, openapi, docs, java-spring, js-sdk, html, test-http]
 
+# Khung web thống nhất (shell): sidebar dọc + navbar + vùng nội dung.
+#   layout: vertical-floating      — navbar tách khỏi mép (margin, bo góc, bóng, sticky), nội dung card trên nền xám
+#           vertical-transparent   — navbar trong suốt, khi cuộn thêm nền mờ (backdrop-filter) để chữ vẫn đọc được
+#   theme:  light | dark
+#   brand:  tên hiện trên sidebar
+ui:
+  layout: vertical-floating
+  theme: light
+  brand: DevHub
+
 # Bộ cột chuẩn. Entity khai báo `profiles: [...]` thì generator tự thêm.
 profiles:
   tenant:
