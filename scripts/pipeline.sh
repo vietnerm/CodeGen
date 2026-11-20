@@ -73,8 +73,9 @@ integrity() {
 
 # mvn chỉ chạy khi nguồn Java (sinh ra + core viết tay) khác lần xanh trước.
 # Vì sao: mvn là bước chậm nhất; sinh/đổi HTML hay SQL không ảnh hưởng gì tới jar.
-maybe_build() {  # $1 = "đầy đủ" (core SDK + app) | "chỉ app" (dùng sau khi sinh lại out/ ở 6c)
-  local mode="$1" out_line dec why
+# (Bước 9 — layout thứ hai — luôn mvn lại, vì static/index.html phải vào đúng jar.)
+maybe_build() {
+  local out_line dec why
   out_line=$(python generator.py skip-build)
   dec=${out_line%%$'\t'*}
   why=${out_line#*$'\t'}
@@ -84,9 +85,7 @@ maybe_build() {  # $1 = "đầy đủ" (core SDK + app) | "chỉ app" (dùng sau
     return 0
   fi
   echo "· mvn: $why"
-  if [ "$mode" = "đầy đủ" ]; then
-    mvn -B -q -f core/java/pom.xml install -DskipTests
-  fi
+  mvn -B -q -f core/java/pom.xml install -DskipTests
   mvn -B -q -f out/app/pom.xml package -DskipTests
 }
 
@@ -113,7 +112,7 @@ if [ "${SKIP_APP:-0}" = 1 ]; then echo -e "\n✓ ĐẠT tới bước 4 (SKIP_AP
 
 if [ "${SKIP_BUILD:-0}" != 1 ]; then
   begin "5. Build core SDK + app"
-  maybe_build "đầy đủ"
+  maybe_build
   end
 else
   echo "(SKIP_BUILD=1 — dùng jar có sẵn)"
@@ -136,26 +135,6 @@ if [ "${SKIP_UI:-0}" != 1 ] && python -c "import playwright" 2>/dev/null; then
     echo "── xem ảnh trong out/ui/ ──"; cat out/ui/report.md 2>/dev/null | head -60; exit 1
   fi
   end
-
-  # 6c. Lượt rút gọn cho LAYOUT THỨ HAI: UI_LAYOUT đè ui.layout khi sinh lại (chỉ PostgreSQL —
-  # publish ảnh vào PR chạy ở matrix postgresql, tránh tốn thời gian 2 DB cho cùng 1 ảnh)
-  if [ "$DB_TYPE" = postgresql ]; then
-    begin "6c. Test giao diện layout thứ hai (UI_LAYOUT=vertical-transparent, rút gọn)"
-    kill $APP_PID 2>/dev/null || true; wait $APP_PID 2>/dev/null || true
-    KEEP_UI="${TMPDIR:-/tmp}/ui.keep"             # generator build xoá lại out/ — giữ ảnh layout 1 NGOÀI out/
-    rm -rf "$KEEP_UI"; cp -r out/ui "$KEEP_UI"
-    UI_LAYOUT=vertical-transparent python generator.py build > /dev/null
-    rm -rf out/ui; mv "$KEEP_UI" out/ui
-    mkdir -p out/logs
-    maybe_build "chỉ app"                          # Java không đọc ui.layout → thường được bỏ qua
-    java -jar out/app/target/app.jar > out/logs/app-layout2.log 2>&1 &
-    APP_PID=$!
-    if ! BASE_URL="http://localhost:$PORT" UI_OUT=out/ui2 python out/tests/ui/run_ui.py --quick; then
-      echo "── xem ảnh layout 2 trong out/ui2/ ──"; cat out/ui2/report.md 2>/dev/null | head -40; exit 1
-    fi
-    python scripts/merge_ui2.py layout-vertical-transparent
-    end
-  fi
 else
   echo "(bỏ qua test giao diện: SKIP_UI=1 hoặc chưa cài playwright)"
 fi
@@ -164,9 +143,34 @@ begin "7. Toàn vẹn dữ liệu sau test"
 integrity
 end
 
+# 8. Ghi state TRƯỚC lượt layout thứ hai — vì sao: static/index.html nằm trong out/app và
+# được đóng gói vào jar; nếu ghi state sau khi sinh lại theo UI_LAYOUT thì sha luôn lệch,
+# lần chạy sau bước 5 không bao giờ được bỏ qua. Jar trong .cache cũng phải là bản layout
+# mặc định để lần sau khôi phục đúng những gì bước 6 đã test.
 begin "8. Ghi state build xanh (.cache) cho lần chạy sau"
 python generator.py save-state
 if [ -f out/app/target/app.jar ]; then cp out/app/target/app.jar .cache/app.jar; fi
 end
+
+# 9. Lượt rút gọn cho LAYOUT THỨ HAI: UI_LAYOUT đè ui.layout khi sinh lại (chỉ PostgreSQL —
+# publish ảnh vào PR chạy ở matrix postgresql, tránh tốn thời gian 2 DB cho cùng 1 ảnh).
+# Luôn mvn lại: static/index.html (layout 2) phải được đóng gói vào jar, không dùng jar cũ.
+if [ "${SKIP_UI:-0}" != 1 ] && [ "$DB_TYPE" = postgresql ] && python -c "import playwright" 2>/dev/null; then
+  begin "9. Test giao diện layout thứ hai (UI_LAYOUT=vertical-transparent, rút gọn)"
+  kill $APP_PID 2>/dev/null || true; wait $APP_PID 2>/dev/null || true
+  KEEP_UI="${TMPDIR:-/tmp}/ui.keep"             # generator build xoá lại out/ — giữ ảnh layout 1 NGOÀI out/
+  rm -rf "$KEEP_UI"; cp -r out/ui "$KEEP_UI"
+  UI_LAYOUT=vertical-transparent python generator.py build > /dev/null
+  rm -rf out/ui; mv "$KEEP_UI" out/ui
+  mkdir -p out/logs
+  mvn -B -q -f out/app/pom.xml package -DskipTests
+  java -jar out/app/target/app.jar > out/logs/app-layout2.log 2>&1 &
+  APP_PID=$!
+  if ! BASE_URL="http://localhost:$PORT" UI_OUT=out/ui2 python out/tests/ui/run_ui.py --quick; then
+    echo "── xem ảnh layout 2 trong out/ui2/ ──"; cat out/ui2/report.md 2>/dev/null | head -40; exit 1
+  fi
+  python scripts/merge_ui2.py layout-vertical-transparent
+  end
+fi
 
 echo -e "\n✓ PIPELINE ĐẠT ($DB_TYPE) — app: http://localhost:$PORT/index.html · API: /openapi/openapi.yaml"
