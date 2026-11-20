@@ -25,8 +25,10 @@ Cùng một pipeline chạy 2 lần liên tiếp, không sửa gì giữa hai l�
 
 Đọc số liệu:
 
-- Máy dev m2 ấm thì mvn chỉ chiếm ~23% tổng thời gian; nhưng ở CI mvn lạnh là bước nhiều
-  phút nhất — đó là chỗ cache nhắm tới (Mức B(i), bỏ qua khi nguồn Java y hệt lần xanh trước).
+- Máy dev m2 ấm thì mvn chỉ chiếm ~23% tổng thời gian. Ở CI đo lần đầu (run 44721884152) mvn
+  chỉ ~13–14s vì setup-java@v4 có cache maven — m2 không lạnh như dự đoán; nhưng bước 5 vẫn
+  là bước đơn lớn nhất → đó là chỗ cache nhắm tới (Mức B(i), bỏ qua khi nguồn Java y hệt lần
+  xanh trước). App lớn dần thì mvn lớn theo.
 - Bỏ qua mvn phải đảm bảo jar khớp nguồn: state được ghi ở bước 8 (trước lượt layout thứ hai)
   và kèm jar layout mặc định; bước 9 luôn mvn lại vì `static/index.html` của layout 2 phải vào
   đúng jar (thử nghiệm run 2 — xem commit "ghi state ở bước 8 TRƯỚC lượt layout thứ hai").
@@ -41,5 +43,5 @@ Cùng một pipeline chạy 2 lần liên tiếp, không sửa gì giữa hai l�
 
 | Môi trường | mvn thật (s) | bỏ qua mvn (s) | Ghi chú |
 |---|---|---|---|
-| CI ubuntu-latest · PostgreSQL | _(chờ run CI)_ | _(chờ run CI)_ | mvn lạnh |
-| CI ubuntu-latest · MySQL | _(chờ run CI)_ | _(chờ run CI)_ | mvn lạnh |
+| CI ubuntu-latest · PostgreSQL | 13 | _(chờ run có cache)_ | run 44721884152 · tổng 10 bước ≈ 38s |
+| CI ubuntu-latest · MySQL | 14 | _(chờ run có cache)_ | run 44721884152 · tổng 8 bước ≈ 33s (bước 9 chỉ chạy PostgreSQL) |
