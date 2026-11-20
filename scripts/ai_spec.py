@@ -147,8 +147,11 @@ def compose(ir, facts, fid, parent, module, schema_name):
         elif f['type'] == 'TEXT' and ex is not None:
             ex = str(ex)[: f.get('length') or 200]
         f['example'] = ex
-        if x.get('search') or n == pk:
-            f['search'] = x.get('search') or 'eq'
+        if f['type'] == 'TEXT' and (x.get('search') or n == pk):   # tìm kiếm chỉ trên cột chữ
+            f['search'] = 'like' if x.get('search') == 'like' and not f.get('codemap') else 'eq'
+        if f['type'] != 'TEXT':                                     # pattern/độ dài chỉ có nghĩa với chữ
+            f.pop('pattern', None)
+            f.pop('length', None)
         fields.append(f)
     hooks = []
     for i, r in enumerate(facts.get('rules') or [], 1):
@@ -233,6 +236,9 @@ def generate(fid, request, parent='', log=print):
         raw = ask(messages)
         try:
             facts = json.loads(raw)
+            log(f"model trích {len(facts.get('fields', []))} trường: " + ', '.join(
+                f"{x.get('name')}({x.get('type')}{', ref ' + x['ref'] if x.get('ref') else ''})"
+                for x in facts.get('fields', [])) + (f"; luật: {len(facts.get('rules') or [])}" if facts.get('rules') else ''))
             spec = compose(ir, facts, fid, parent, module, schema_name)
         except (ValueError, KeyError, TypeError) as e:
             err = f"JSON lỗi: {e}"

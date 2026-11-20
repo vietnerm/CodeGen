@@ -156,6 +156,10 @@ def main():
         logs = []
         ok, dest, used = ai_spec.generate(fid, text or issue['title'], parent, log=logs.append)
         body = [f"🤖 **Chức năng mới `{fid}`**{chosen}", '', '### Ngữ cảnh AI đã dùng (tìm trong IR)', md_context(used or ctx), '']
+        trace = [x for x in logs if x.startswith('model trích')]
+        if trace:
+            body += ['<details><summary>Model đã trích</summary>', '', *[f"- lần {i}: {t}" for i, t in enumerate(trace, 1)],
+                     '', '</details>', '']
         if ok:
             new_ir, _ = model.build_ir(ROOT / 'spec')
             imp = ai.impact(new_ir, fid)
