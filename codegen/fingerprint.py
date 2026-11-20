@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import shutil
 import subprocess
 from pathlib import Path
 
 # Đổi FORMAT hoặc G_GLOBS ⇒ state cũ (.cache/build-state.json) vô hiệu tự động.
-FORMAT = 'build-fingerprint-v2'   # v2: loại target/ khỏi G và core_java_sha — state cũ (v1) vô hiệu
+FORMAT = 'build-fingerprint-v3'   # v3: state kèm jar devhub-core (.cache) để m2 không bị cũ khi mvn bị bỏ qua
 
 # Phần nền: đổi bất kỳ file nào khớp các mẫu này ⇒ ảnh hưởng tới TOÀN BỘ chức năng.
 # Chú ý 1: _codemaps.yaml / _testdata.yaml CỐ Ý không nằm đây — chúng được soi theo lát
@@ -266,6 +268,39 @@ def load_state(root: Path) -> dict | None:
         return None
 
 
+def pom_gav(pom: Path) -> tuple[str, str, str]:
+    """(groupId, artifactId, version) của project — bỏ khối <parent> (GAV của nó không phải của project)."""
+    text = pom.read_text(encoding='utf-8')
+    after = text.split('</parent>', 1)[-1]
+
+    def pick(tag: str) -> str:
+        m = re.search(rf'<{tag}>([^<]+)</{tag}>', after)
+        if not m:
+            raise SystemExit(f'{pom}: thiếu <{tag}> sau khối parent')
+        return m.group(1).strip()
+
+    return pick('groupId'), pick('artifactId'), pick('version')
+
+
+def install_core_m2(root: Path) -> str:
+    """Cài jar core từ .cache vào m2 (install-file, KHÔNG compile) — để bước 9 mvn lại app
+    được khi mvn bước 5 đã bị bỏ qua. Dùng chung một pipeline cả 2 DB."""
+    root = Path(root)
+    cj = root / '.cache' / 'devhub-core.jar'
+    if not cj.exists():
+        raise SystemExit('không có .cache/devhub-core.jar — phải mvn thật')
+    g, a, v = pom_gav(root / 'core' / 'java' / 'pom.xml')
+    try:
+        r = subprocess.run(['mvn', '-B', '-q', 'org.apache.maven.plugins:maven-install-plugin:3.1.2:install-file',
+                            f'-Dfile={cj.resolve()}', f'-DgroupId={g}', f'-DartifactId={a}',
+                            f'-Dversion={v}', '-Dpackaging=jar'], capture_output=True, text=True)
+    except FileNotFoundError:
+        raise SystemExit('không thấy mvn trên PATH — không cài được core vào m2')
+    if r.returncode != 0:
+        raise SystemExit(f'install-file thất bại: {(r.stderr or r.stdout)[-400:]}')
+    return f'{g}:{a}:{v}'
+
+
 def skip_build(root: Path) -> tuple[bool, str]:
     """(bỏ_qua_mvn, lý do) — chỉ tin khi: có state xanh trước + jar còn + nguồn Java y hệt."""
     root = Path(root)
@@ -274,6 +309,11 @@ def skip_build(root: Path) -> tuple[bool, str]:
         return False, 'chưa có .cache/build-state.json xanh trước đó (hoặc luật băm đã đổi)'
     if not (root / '.cache' / 'app.jar').exists():
         return False, 'không có jar đã dựng trong .cache/app.jar'
+    cj = root / '.cache' / 'devhub-core.jar'
+    if st.get('core_jar_sha') in (None, 'khong-co') or not cj.exists() \
+            or _sha(cj.read_bytes()) != st['core_jar_sha']:
+        return False, ('không có devhub-core (jar cài m2) khớp lần xanh trong .cache — '
+                       'mvn lại để dựng và cài core, tránh compile vào core cũ')
     if not (root / 'out' / 'app').exists():
         return False, 'out/app chưa được sinh (pipeline luôn sinh trước khi tới bước mvn)'
     cur_app = tree_sha(root / 'out' / 'app', exclude=('target',))
@@ -281,6 +321,12 @@ def skip_build(root: Path) -> tuple[bool, str]:
     if cur_app == st.get('out_app_sha') and cur_core == st.get('core_java_sha'):
         return True, 'nguồn Java sinh ra + core/java y hệt lần xanh trước — dùng lại jar, bỏ mvn'
     return False, 'out/app hoặc core/java đổi so với lần xanh trước'
+
+
+def core_jar(root: Path) -> Path | None:
+    """jar devhub-core sau khi mvn dựng (bước 5) — None nếu chưa có target/."""
+    hits = sorted((Path(root) / 'core' / 'java' / 'target').glob('devhub-core-*.jar'))
+    return hits[-1] if hits else None
 
 
 def save_state(root: Path, ir=None) -> dict:
@@ -297,6 +343,18 @@ def save_state(root: Path, ir=None) -> dict:
         # timestamp bản dựng; giữ vào thì run sau (target chưa có/đổi timestamp) luôn bị coi là
         # "đổi nguồn" và mvn lại vô ích (lỗi thật run 44725364104: cache đã restore mà vẫn mvn),
     }
+    # jar core kèm theo state: khi mvn bước 5 bị bỏ qua, runner chỉ có m2 khôi phục từ cache
+    # cũ của setup-java (không cài lại core) — bước 9 mvn lại app sẽ compile vào core CŨ
+    # (lỗi thật run 44727293068: Errors.merge không tồn tại trong core cũ). Cất jar core
+    # đúng lần xanh vào .cache, lần skip chỉ install-file vào m2 (~2–3s, không compile).
+    jar = core_jar(root)
+    cache_dir = root / '.cache'
+    cache_dir.mkdir(exist_ok=True)
+    if jar is not None:
+        shutil.copyfile(jar, cache_dir / 'devhub-core.jar')
+        st['core_jar_sha'] = _sha((cache_dir / 'devhub-core.jar').read_bytes())
+    else:
+        st['core_jar_sha'] = 'khong-co'    # chưa mvn lần nào → không được phép skip
     p = state_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(st, ensure_ascii=False, indent=1), encoding='utf-8')

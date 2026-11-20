@@ -60,7 +60,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('command',
                     choices=['validate', 'build', 'ir', 'context', 'impact', 'schema',
-                             'changes', 'ghash', 'skip-build', 'save-state', 'clear-cache'])
+                             'changes', 'ghash', 'skip-build', 'save-state', 'clear-cache',
+                             'install-core-m2'])
     ap.add_argument('arg', nargs='?', help='mô tả (context) hoặc mã chức năng (impact)')
     ap.add_argument('--spec', type=Path, default=ROOT / 'spec')
     ap.add_argument('-o', '--out', type=Path, default=ROOT / 'out')
@@ -81,6 +82,9 @@ def main():
     if args.command == 'clear-cache':
         removed = fingerprint.clear_cache(ROOT)
         print('đã xoá: ' + (', '.join(removed) or '(trống — chưa có cache)'))
+        return
+    if args.command == 'install-core-m2':
+        print('✓ cài m2: ' + fingerprint.install_core_m2(ROOT))
         return
 
     ir, rep = model.build_ir(args.spec)

@@ -83,6 +83,13 @@ maybe_build() {
   if [ "$dec" = skip ]; then
     echo "· bỏ qua mvn — $why"
     restore_jar
+    # Cài jar core của lần xanh vào m2 (install-file, không compile ~2–3s): bước 9 mvn lại
+    # app và resolve devhub-core từ m2, mà m2 của runner là snapshot cũ do setup-java
+    # khôi phục (bước 5 bị bỏ qua nên không có core mới) — lỗi thật run 44727293068:
+    # compile vào core cũ không có Errors.merge. Chỉ postgresql chạy bước 9 nên MySQL khỏi cài.
+    if [ "$DB_TYPE" = postgresql ] && [ "${SKIP_UI:-0}" != 1 ]; then
+      python generator.py install-core-m2
+    fi
     return 0
   fi
   echo "· mvn: $why"

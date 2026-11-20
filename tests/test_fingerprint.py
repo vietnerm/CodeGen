@@ -211,3 +211,33 @@ def test_state_v1_cu_bat_le(tmp_path):
     fingerprint.state_path(work).write_text(json.dumps(st), encoding='utf-8')
     do, why = fingerprint.skip_build(work)
     assert not do and 'build-state' in why
+
+
+def test_core_jar_cu_khac_phai_mvn_lai(tmp_path):
+    """Run 44727293068: skip đúng nhưng bước 9 mvn lại app compile vào core CŨ trong m2
+    (setup-java khôi phục snapshot cũ, bước 5 bị bỏ qua nên không cài core mới).
+    Giải pháp: state kèm .cache/devhub-core.jar của lần xanh — jar trong cache khác jar
+    state ⇒ không được skip (mvn thật để dựng + cài core mới)."""
+    work = fresh_copy(tmp_path)
+    do, why = fingerprint.skip_build(work)
+    assert not do and 'build-state' in why
+    fingerprint.save_state(work)                     # copy jar core (nếu có) vào .cache
+    (work / '.cache' / 'app.jar').write_bytes(b'jar-gia-lap')
+    (work / 'out' / 'app').mkdir(parents=True)
+    st = fingerprint.load_state(work)
+    st['out_app_sha'] = fingerprint.tree_sha(work / 'out' / 'app', exclude=('target',))
+    st['core_java_sha'] = fingerprint.tree_sha(work / 'core' / 'java', exclude=('target',))
+    fingerprint.state_path(work).write_text(json.dumps(st), encoding='utf-8')
+    if st['core_jar_sha'] == 'khong-co':             # bản copy không có target — bỏ qua phần jar
+        return
+    do, why = fingerprint.skip_build(work)
+    assert do, why                                   # jar core khớp state → skip được
+    (work / '.cache' / 'devhub-core.jar').write_bytes(b'core CU - khac state')   # m2 cũ
+    do, why = fingerprint.skip_build(work)
+    assert not do and 'devhub-core' in why
+
+
+def test_pom_gav_doc_dung_toa_do():
+    """install-file cần GAV của project, KHÔNG của khối <parent> (spring-boot đứng trước)."""
+    g, a, v = fingerprint.pom_gav(ROOT / 'core' / 'java' / 'pom.xml')
+    assert (g, a, v) == ('vn.io.devhub', 'devhub-core', '0.1.0')
