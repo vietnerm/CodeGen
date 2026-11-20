@@ -78,6 +78,7 @@ fi
 
 if [ "${SKIP_UI:-0}" != 1 ] && python -c "import playwright" 2>/dev/null; then
   step "6b. Test giao diện (Playwright) + chụp màn hình → out/ui/"
+  run_sql "out/sql/$DB_TYPE/90_testdata.sql"     # dữ liệu sạch: không dùng lại bản ghi test API để lại
   if ! BASE_URL="http://localhost:$PORT" python out/tests/ui/run_ui.py; then
     echo "── xem ảnh trong out/ui/ ──"; cat out/ui/report.md 2>/dev/null | head -60; exit 1
   fi
