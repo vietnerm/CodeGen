@@ -3,24 +3,19 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ project.title }}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css">
+  <link rel="stylesheet" href="/vendor/tabler-1.0.0-beta20/css/tabler.min.css">
+  <link rel="stylesheet" href="/vendor/tabler-icons-3.35.0/css/tabler-icons.min.css">
+  <link rel="stylesheet" href="/css/layout.css">
 </head>
 <body>
-  <div class="container-xl py-4">
-    <h1>{{ project.title }}</h1>
-    <p class="text-muted">API: <a href="/openapi/openapi.yaml">openapi.yaml</a> · <a href="/docs/index.md">tài liệu</a></p>
-    <div id="app"></div>
-  </div>
+  {# Khung web thống nhất: shell (sidebar menu cây + navbar + vùng nội dung) do core/js/shell.js dựng —
+     đổi layout/theme chỉ cần sửa spec/_project.yaml → sinh lại, không sửa JS #}
+  <div id="app" class="layout-{{ project.ui.layout }}" data-theme="{{ project.ui.theme }}"></div>
   <script type="module">
-    import { core } from '/js/core.js';
-    import { renderLogin } from '/js/page.js';
-    const app = document.getElementById('app');
-    const tree = (items) => '<ul>' + items.map((n) => '<li>' + (n.url ? `<a href="${n.url}">${n.function_id} · ${n.function_name}</a>`
-      : `${n.function_id} · ${n.function_name}`) + (n.children.length ? tree(n.children) : '') + '</li>').join('') + '</ul>';
-    const start = () => core.menu().then((m) => { app.innerHTML = tree(m); })
-      .catch((e) => (e.status === 401 ? renderLogin(app, start) : (app.textContent = e.message)));
-    core.token ? start() : renderLogin(app, start);
+    import { renderShell } from '/js/shell.js';
+    renderShell(document.getElementById('app'), {{ project.ui | tojson }});
   </script>
 </body>
 </html>

@@ -70,6 +70,7 @@ def build(ir, ctx):
             'actions': [a['code'] for a in fn['actions']],
             'types': {f['name']: f['type'] for f in e['api_fields']},
             'search': [{'field': f['name'], 'kind': f['search']} for f in e['search_fields']],
+            'codemap_search': [{'field': f['name'], 'group': f['codemap']} for f in e['search_fields'] if f['codemap']],
             'refs': [{'cols': r['cols'], 'parent_fid': r['parent_function'], 'parent_cols': r['parent_cols']}
                      for r in fn['refs'] if r['parent_function']],
             'children': [{'child_fid': r['child_function'], 'cols': r['cols'], 'parent_cols': r['parent_cols'],
