@@ -1,3 +1,6 @@
+{% set fnmap = {} %}{% for f in ir.functions %}{% set _ = fnmap.update({f.id: f}) %}{% endfor %}
+{% set refs = [] %}{% for r in fn.refs if r.parent_function and r.cols | length == 1 and not r.composition %}{% set _ = refs.append({'col': r.cols[0], 'fid': r.parent_function, 'base': fnmap[r.parent_function].api_base, 'pk': r.parent_cols[0], 'display': (r.lookup | map(attribute='field') | list)}) %}{% endfor %}
+{% set dets = [] %}{% for d in fn.details %}{% set ce = ents[d.child_entity] %}{% set _ = dets.append({'as': d['as'], 'fid': d.child_function, 'label': d.label, 'link': d.cols, 'fields': ce.api_fields | rejectattr('readonly') | rejectattr('name', 'in', d.cols + ['owner_unit']) | map('pick', 'name', 'label', 'type', 'length', 'required', 'enum', 'codemap', 'min', 'max') | list}) %}{% endfor %}
 // SINH TỰ ĐỘNG bởi CodeGen — {{ fn.id }} {{ fn.name }} — KHÔNG SỬA TAY
 import { core } from '../core.js';
 
@@ -15,6 +18,7 @@ export const {{ fn.id }} = {
     'search': ent.search_fields | map(attribute='name') | list,
     'list': (ent.pk + (ent.api_fields | rejectattr('system') | rejectattr('name', 'in', ent.pk) | map(attribute='name') | list))[:7],
     'actions': fn.actions | map(attribute='code') | list,
+    'refs': refs, 'details': dets,
     'fields': ent.api_fields | map('pick', 'name', 'label', 'type', 'length', 'required', 'readonly', 'system', 'nullable', 'pattern', 'enum', 'codemap', 'min', 'max') | list
   } | tojson(2) | indent(2) }},
 {% for a in fn.actions %}

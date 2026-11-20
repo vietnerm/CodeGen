@@ -14,8 +14,23 @@ const h = (tag, attrs = {}, ...kids) => {
   return el;
 };
 
-async function input(f, value) {
+let seq = 0;
+async function input(f, value, ref) {
   const common = { name: f.name, class: 'form-control', disabled: f.readonly };
+  if (ref && !f.readonly) {                       // tham chiếu: gợi ý từ API của chức năng cha
+    const id = `dl-${f.name}-${++seq}`;
+    const dl = h('datalist', { id });
+    const el = h('input', { ...common, type: 'text', value: value ?? '', list: id, maxlength: f.length });
+    el.addEventListener('focus', async () => {
+      if (dl.childElementCount) return;
+      try {
+        const r = await core.request('GET', ref.base, { query: { size: 100 } });
+        dl.replaceChildren(...r.items.map((x) => h('option', { value: x[ref.pk] },
+          ref.display.map((k) => x[k]).filter(Boolean).join(' · '))));
+      } catch { /* không có quyền xem cha: vẫn nhập tay được */ }
+    });
+    return h('span', {}, el, dl);
+  }
   if (f.codemap || f.enum) {
     const opts = f.codemap ? await core.codemap.load(f.codemap) : f.enum.map((c) => ({ code: c, label: c }));
     const sel = h('select', { ...common, class: 'form-select' }, h('option', { value: '' }, '—'),
@@ -27,15 +42,36 @@ async function input(f, value) {
     step: f.type === 'DECIMAL' ? 'any' : undefined });
 }
 
+const val = (f, v) => (v === '' || v == null ? null : (['INT', 'BIGINT', 'DECIMAL'].includes(f.type) ? Number(v) : v));
+
 function readForm(form, meta) {
   const out = {};
   for (const f of meta.fields) {
-    const el = form.elements[f.name];
+    const el = form.querySelector(`[data-main][name="${f.name}"]`);
     if (!el || f.readonly) continue;
-    const v = el.value.trim();
-    out[f.name] = v === '' ? null : (['INT', 'BIGINT', 'DECIMAL'].includes(f.type) ? Number(v) : v);
+    out[f.name] = val(f, el.value.trim());
+  }
+  for (const d of meta.details || []) {
+    out[d.as] = [...form.querySelectorAll(`tr[data-detail="${d.as}"]`)].map((tr) =>
+      Object.fromEntries(d.fields.map((f) => [f.name, val(f, tr.querySelector(`[name="${f.name}"]`).value.trim())])));
   }
   return out;
+}
+
+/** Bảng chi tiết (master–detail) sửa trực tiếp; gửi cả mảng khi lưu. */
+async function detailTable(d, rows) {
+  const body = h('tbody');
+  const addRow = async (r = {}) => {
+    const cells = await Promise.all(d.fields.map(async (f) => h('td', {}, await input(f, r[f.name]))));
+    const tr = h('tr', { 'data-detail': d.as }, cells,
+      h('td', {}, h('button', { type: 'button', class: 'btn btn-sm btn-ghost-danger', onclick: () => tr.remove() }, '✕')));
+    body.append(tr);
+  };
+  for (const r of rows || []) await addRow(r);
+  return h('div', { class: 'col-12' }, h('label', { class: 'form-label mt-2' }, `${d.label} (${d.fid})`),
+    h('table', { class: 'table table-sm' },
+      h('thead', {}, h('tr', {}, d.fields.map((f) => h('th', {}, f.label + (f.required ? ' *' : ''))), h('th'))), body),
+    h('button', { type: 'button', class: 'btn btn-sm', onclick: () => addRow() }, '+ Thêm dòng'));
 }
 
 export async function renderCrudPage(root, api) {
@@ -71,13 +107,19 @@ export async function renderCrudPage(root, api) {
   }
 
   async function edit(row) {
+    if (row && (meta.details || []).length) {      // tải đủ bản ghi kèm chi tiết
+      try { row = await api.get(...meta.pk.map((k) => row[k])); } catch (e) { show(e); return; }
+    }
     state.editing = row;
     const form = h('form', { class: 'card-body row g-2' });
     for (const f of meta.fields) {
       if (f.system && f.name !== 'row_version') continue;
-      const el = await input({ ...f, readonly: f.readonly || (row && meta.pk.includes(f.name)) }, row?.[f.name]);
+      const ref = (meta.refs || []).find((r) => r.col === f.name);
+      const el = await input({ ...f, readonly: f.readonly || (row && meta.pk.includes(f.name)) }, row?.[f.name], ref);
+      for (const x of el.matches?.('input,select') ? [el] : el.querySelectorAll('input,select')) x.dataset.main = '1';
       form.append(h('div', { class: 'col-md-4' }, h('label', { class: 'form-label' }, f.label, f.required ? ' *' : ''), el));
     }
+    for (const d of meta.details || []) form.append(await detailTable(d, row?.[d.as]));
     form.append(h('div', { class: 'col-12' },
       h('button', { class: 'btn btn-primary', type: 'submit' }, row ? 'Lưu' : 'Tạo'), ' ',
       h('button', { class: 'btn', type: 'button', onclick: () => { formBox.hidden = true; } }, 'Đóng')));
@@ -85,7 +127,7 @@ export async function renderCrudPage(root, api) {
       ev.preventDefault();
       const body = readForm(form, meta);
       try {
-        if (row) await api.update(...meta.pk.map((k) => row[k]), { ...body, row_version: row.row_version });
+        if (row) await api.update(...meta.pk.map((k) => row[k]), { ...row, ...body, row_version: row.row_version });
         else await api.create(body);
         formBox.hidden = true;
         await load();

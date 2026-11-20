@@ -24,6 +24,7 @@ ACTIONS = {  # action → (quyền, HTTP method, có pk trên path)
 PHASES = {'VALIDATE', 'BEFORE_SAVE', 'AFTER_SAVE'}
 ON_DELETE = {'CASCADE', 'RESTRICT', 'NULLIFY'}
 FUNC_TYPES = {'MENU', 'BOTH', 'API'}
+REL_KEYS = {'child', 'cols', 'parent', 'parent_cols', 'on_delete', 'name', 'label', 'lookup', 'composition', 'as'}
 
 RE_FID = re.compile(r'^([A-Z]{2})([A-Z0-9]{2})_(\d{4})$')
 RE_MODULE = re.compile(r'^[A-Z]{2}[A-Z0-9]{2}$')
@@ -246,6 +247,8 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
                 'versioned': 'versioned' in prof, 'audit_cols': 'audit' in prof,
             }
             ent['api_fields'] = [f for f in fields if f['name'] != 'tenant_id']
+            ent['base_api_fields'] = list(ent['api_fields'])   # cột thật của bảng (SQL)
+            ent['lookup_fields'] = []                           # cột hiển thị lấy từ bảng cha (JOIN)
             ent['input_fields'] = [f for f in fields if not f['readonly'] and f['name'] not in pk]
             ent['search_fields'] = [f for f in fields if f['search']]
             ent['sort_fields'] = [f['name'] for f in fields
@@ -304,7 +307,8 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
               'target': f.get('target', 'java-spring'), 'entity': None,
               'url': f"/pages/{fid}.html" if item['entity'] else None,
               'api_base': base if item['entity'] else None,
-              'actions': [], 'hooks': [], 'refs': [], 'children': [], 'tests': item.get('tests', [])}
+              'actions': [], 'hooks': [], 'refs': [], 'children': [], 'tests': item.get('tests', []),
+              'details': [], 'master': None}
         ent = item['entity']
         if ent:
             fn['entity'] = ent['id']
@@ -379,15 +383,54 @@ def build_ir(spec_dir: Path) -> tuple[dict, Report]:
                 rep.err(w, f"kiểu lệch {c}:{cf['type']} ≠ {p}:{pf['type']}")
         if sorted(pcols) != sorted(pe['pk']):
             rep.err(w, f"parent_cols {pcols} phải là pk {pe['pk']} của {parent_id}")
-        od = r.get('on_delete', 'RESTRICT')
+        bad_keys = set(r) - REL_KEYS - {'_schema', '_where', '_fid'}
+        if bad_keys:
+            rep.err(w, f"thuộc tính relation không hợp lệ: {sorted(bad_keys)}")
+        composition = bool(r.get('composition'))
+        od = r.get('on_delete', 'CASCADE' if composition else 'RESTRICT')
         if od not in ON_DELETE:
             rep.err(w, f"on_delete phải thuộc {sorted(ON_DELETE)}")
+        if composition and od != 'CASCADE':
+            rep.err(w, "composition (master–detail) bắt buộc on_delete: CASCADE")
         slug = f"{ce['name']}__{'_'.join(cols)}" + (f"__{r['name']}" if r.get('name') else '')
         rel = {'id': f"{child_id}->{parent_id}" + (f"#{r['name']}" if r.get('name') else ''),
                'slug': slug, 'child': child_id, 'cols': cols, 'parent': parent_id,
                'parent_cols': pcols, 'on_delete': od, 'label': r.get('label') or pe['label'],
                'tenant_scoped': ce['tenant'] and pe['tenant'],
-               'child_function': ce['function'], 'parent_function': pe['function']}
+               'child_function': ce['function'], 'parent_function': pe['function'],
+               'composition': composition, 'as': r.get('as'), 'lookup': []}
+        # ── lookup: cột hiển thị của bảng cha, JOIN khi đọc (chỉ đọc) ──
+        for i, lk in enumerate(r.get('lookup') or []):
+            src, alias = (lk, lk) if isinstance(lk, str) else (lk.get('field'), lk.get('as') or lk.get('field'))
+            pf = next((f for f in pe['fields'] if f['name'] == src), None)
+            if not pf:
+                rep.err(w, f"lookup: {parent_id} không có cột {src!r}")
+                continue
+            if not RE_IDENT.match(str(alias)) or any(f['name'] == alias for f in ce['api_fields']):
+                rep.err(w, f"lookup: tên {alias!r} trùng cột của {child_id} — đặt `as:` khác")
+                continue
+            lf = {**pf, 'name': alias, 'n': names(alias), 'readonly': True, 'system': False, 'required': False,
+                  'nullable': True, 'search': None, 'pattern': None, 'enum': None, 'min': None, 'max': None,
+                  'identity': False, 'default': None, 'from_profile': False,
+                  'lookup': {'rel': slug, 'join': f"j{len(ce['lookup_fields'])}_{i}", 'parent_field': src,
+                             'parent_table': pe['table'], 'parent_function': pe['function']}}
+            ce['lookup_fields'].append(lf)
+            ce['api_fields'].append(lf)
+            rel['lookup'].append({'field': src, 'as': alias})
+        # ── composition: bảng con thuộc về bảng cha (lưu lồng trong 1 transaction) ──
+        if composition:
+            asn = r.get('as')
+            if not ce['function'] or not pe['function']:
+                rep.err(w, "composition cần cả bảng cha và con là function CRUD")
+            elif not asn or not RE_IDENT.match(str(asn)) or any(f['name'] == asn for f in pe['fields']):
+                rep.err(w, f"composition cần `as:` (snake_case, không trùng cột của {parent_id}), vd payments")
+            elif fn_by_id[ce['function']]['master']:
+                rep.err(w, "mỗi bảng con chỉ có 1 composition")
+            else:
+                fn_by_id[ce['function']]['master'] = rel
+                fn_by_id[pe['function']]['details'].append(
+                    {'as': asn, 'n': names(asn), 'child_function': ce['function'], 'child_entity': child_id,
+                     'cols': cols, 'parent_cols': pcols, 'slug': slug, 'label': ce['label']})
         relations.append(rel)
         if ce['function']:
             fn_by_id[ce['function']]['refs'].append(rel)

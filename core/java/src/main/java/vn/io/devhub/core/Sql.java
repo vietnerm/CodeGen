@@ -70,13 +70,13 @@ public class Sql {
             p.put("f_" + f.getKey(), "true".equals(cond.meta("like")) ? "%" + likeEscape(v.toString()) + "%" : v);
         }
         List<String> allowed = split(sel.meta("sort"));
-        List<String> pk = split(sel.meta("pk"));
+        String a = sel.meta("alias") == null ? "" : sel.meta("alias") + ".";
         StringBuilder order = new StringBuilder(" ORDER BY ");
         if (q.sort() != null && !q.sort().isBlank()) {
             if (!allowed.contains(q.sort())) throw ApiException.badRequest("Không sắp xếp được theo " + q.sort());
-            order.append(q.sort()).append(' ').append(q.dir()).append(", ");
+            order.append(a).append(q.sort()).append(' ').append(q.dir()).append(", ");
         }
-        order.append(String.join(", ", pk));
+        order.append(String.join(", ", split(sel.meta("pk")).stream().map(c -> a + c).toList()));
         long total = countSql(ctx, cnt.sql() + where, p);
         p.put("_limit", q.size());
         p.put("_offset", q.page() * q.size());

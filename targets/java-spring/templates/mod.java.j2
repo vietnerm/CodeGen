@@ -5,6 +5,25 @@
 {% set pk_decl %}{% for f in ent.pk_fields %}{{ f | ftype }} {{ f.n.camel }}{{ ', ' if not loop.last }}{% endfor %}{% endset %}
 {% set pk_of_d %}{% for f in ent.pk_fields %}d.{{ f.n.camel }}(){{ ', ' if not loop.last }}{% endfor %}{% endset %}
 {% set pk_of_s %}{% for f in ent.pk_fields %}s.{{ f.n.camel }}(){{ ', ' if not loop.last }}{% endfor %}{% endset %}
+{% macro detail_block(action) %}
+{% for d in fn.details %}
+        List<{{ m.dto_of(d.child_function) }}> lines{{ d.n.pascal }} = new ArrayList<>();
+        if (d.{{ d.n.camel }}() != null) {
+            for (int i = 0; i < d.{{ d.n.camel }}().size(); i++) {
+                {{ m.dto_of(d.child_function) }} line = d.{{ d.n.camel }}().get(i);
+                if (line == null) {
+                    errors.add("{{ d.as }}[" + i + "]", "REQUIRED", "Dòng {{ d.label }} trống");
+                    continue;
+                }
+                line = {{ d.n.camel }}Mod.prepareDetail(ctx, line.linkTo({% for c, p in zip(d.cols, d.parent_cols) %}d.{{ camel[p] }}(), {% endfor %}{{ 'd.ownerUnit()' if ent.owner_unit else 'null' }}, i));
+                Errors le = new Errors();
+                {{ d.n.camel }}Mod.validateDetail(ctx, line, le);
+                errors.merge("{{ d.as }}[" + i + "]", le);
+                lines{{ d.n.pascal }}.add(line);
+            }
+        }
+{% endfor %}
+{% endmacro %}
 // SINH TỰ ĐỘNG bởi CodeGen từ spec/{{ fn.sys }}/{{ fn.sub }}/{{ fn.id }}.yaml — KHÔNG SỬA TAY
 package {{ m.pkg(fn, 'mod') }};
 
@@ -29,12 +48,19 @@ public class {{ fn.id }}_mod {
     private final Codemap codemap;
     private final Audit audit;
     private final {{ fn.id }}_hook hook;
+{% for d in fn.details %}
+    private final {{ m.mod_of(d.child_function) }} {{ d.n.camel }}Mod;   // chi tiết {{ d.as }}
+{% endfor %}
 
-    public {{ fn.id }}_mod(Sql sql, Codemap codemap, Audit audit, {{ fn.id }}_hook hook) {
+    public {{ fn.id }}_mod(Sql sql, Codemap codemap, Audit audit, {{ fn.id }}_hook hook{% for d in fn.details %},
+                           {{ m.mod_of(d.child_function) }} {{ d.n.camel }}Mod{% endfor %}) {
         this.sql = sql;
         this.codemap = codemap;
         this.audit = audit;
         this.hook = hook;
+{% for d in fn.details %}
+        this.{{ d.n.camel }}Mod = {{ d.n.camel }}Mod;
+{% endfor %}
     }
 
     public Page<{{ D }}> search(Ctx ctx, PageQuery q) {
@@ -43,6 +69,9 @@ public class {{ fn.id }}_mod {
 
     public {{ D }} get(Ctx ctx, {{ pk_decl }}) {
         return sql.one(ctx, FID + ".get", keyParams({{ pk_args }})).map({{ D }}::of)
+{% for d in fn.details %}
+                .map(x -> x.with{{ d.n.pascal }}({{ d.n.camel }}Mod.listByMaster(ctx{% for c, p in zip(d.cols, d.parent_cols) %}, {{ camel[p] }}{% endfor %})))
+{% endfor %}
                 .orElseThrow(() -> ApiException.notFound("Không có {{ ent.label }} " + {% for f in ent.pk_fields %}{{ f.n.camel }}{{ ' + "/" + ' if not loop.last }}{% endfor %}));
     }
 
@@ -50,7 +79,8 @@ public class {{ fn.id }}_mod {
         if (in == null) throw ApiException.badRequest("Thiếu dữ liệu");
         {{ D }} d = defaults(ctx, in);
         Errors errors = new Errors();
-        validate(ctx, "CREATE", d, errors);
+        validate(ctx, "CREATE", d, errors, false);
+{{ detail_block("CREATE") }}
 {% for h in fn.hooks if h.phase == 'VALIDATE' and 'CREATE' in h.actions %}
         if (errors.isEmpty()) hook.{{ h.name }}(ctx, "CREATE", d, errors);
 {% endfor %}
@@ -66,11 +96,14 @@ public class {{ fn.id }}_mod {
             s = hook.{{ h.name }}(ctx, "CREATE", s);
 {% endfor %}
             sql.exec(ctx, FID + ".insert", params(s));
+{% for d in fn.details %}
+            for ({{ m.dto_of(d.child_function) }} line : lines{{ d.n.pascal }}) {{ d.n.camel }}Mod.insertDetail(ctx, line);
+{% endfor %}
             {{ D }} saved = get(ctx, {{ pk_of_s }});
 {% for h in fn.hooks if h.phase == 'AFTER_SAVE' and 'CREATE' in h.actions %}
             hook.{{ h.name }}(ctx, "CREATE", saved);
 {% endfor %}
-            audit.write(ctx, FID, "CREATE", saved.key(), Map.of());
+            audit.write(ctx, FID, "CREATE", saved.key(), Map.of({% for d in fn.details %}"{{ d.as }}", lines{{ d.n.pascal }}.size(){{ ', ' if not loop.last }}{% endfor %}));
             return saved;
         });
     }
@@ -79,7 +112,8 @@ public class {{ fn.id }}_mod {
         if (in == null) throw ApiException.badRequest("Thiếu dữ liệu");
         {{ D }} d = defaults(ctx, in.withKey({{ pk_args }}));
         Errors errors = new Errors();
-        validate(ctx, "UPDATE", d, errors);
+        validate(ctx, "UPDATE", d, errors, false);
+{{ detail_block("UPDATE") }}
 {% if ent.versioned %}
         if (d.rowVersion() == null) errors.add("row_version", "REQUIRED", "Cần row_version hiện tại");
 {% endif %}
@@ -99,6 +133,12 @@ public class {{ fn.id }}_mod {
                 get(ctx, {{ pk_args }});                                  // 404 nếu không thấy / ngoài phạm vi
                 throw ApiException.conflict("Dữ liệu đã bị người khác thay đổi (row_version cũ) — tải lại rồi sửa");
             }
+{% for d in fn.details %}
+            if (d.{{ d.n.camel }}() != null) {                      // có gửi danh sách ⇒ thay toàn bộ chi tiết
+                sql.exec(ctx, FID + ".cascade.{{ d.slug }}", keyParams({{ pk_args }}));
+                for ({{ m.dto_of(d.child_function) }} line : lines{{ d.n.pascal }}) {{ d.n.camel }}Mod.insertDetail(ctx, line);
+            }
+{% endfor %}
             {{ D }} saved = get(ctx, {{ pk_args }});
 {% for h in fn.hooks if h.phase == 'AFTER_SAVE' and 'UPDATE' in h.actions %}
             hook.{{ h.name }}(ctx, "UPDATE", saved);
@@ -142,8 +182,36 @@ public class {{ fn.id }}_mod {
         });
     }
 
+{% if fn.master %}
+    // ─────────────── dùng bởi bản ghi cha {{ fn.master.parent_function }} (master–detail) ───────────────
+{% set link = fn.master.cols %}
+
+    /** Áp giá trị mặc định cho dòng chi tiết (đã gắn khoá cha bằng linkTo). */
+    public {{ D }} prepareDetail(Ctx ctx, {{ D }} line) {
+        return defaults(ctx, line);
+    }
+
+    /** Validate dòng chi tiết như CREATE, bỏ kiểm tham chiếu tới bản ghi cha (cha có thể chưa được lưu). */
+    public void validateDetail(Ctx ctx, {{ D }} line, Errors errors) {
+        validate(ctx, "CREATE", line, errors, true);
+{% for h in fn.hooks if h.phase == 'VALIDATE' and 'CREATE' in h.actions %}
+        if (errors.isEmpty()) hook.{{ h.name }}(ctx, "CREATE", line, errors);
+{% endfor %}
+    }
+
+    /** Ghi 1 dòng chi tiết — gọi trong transaction của bản ghi cha. */
+    public void insertDetail(Ctx ctx, {{ D }} line) {
+        sql.exec(ctx, FID + ".insert", params(line));
+    }
+
+    public List<{{ D }}> listByMaster(Ctx ctx{% for c in link %}, {{ ent.fields | selectattr('name', 'equalto', c) | map('ftype') | first }} {{ camel[c] }}{% endfor %}) {
+        return sql.list(ctx, FID + ".by_master", P.of({% for c in link %}"{{ c }}", {{ camel[c] }}{{ ', ' if not loop.last }}{% endfor %}))
+                .stream().map({{ D }}::of).toList();
+    }
+
+{% endif %}
     // ─────────────────────────── luật sinh từ spec ───────────────────────────
-    private void validate(Ctx ctx, String action, {{ D }} d, Errors errors) {
+    private void validate(Ctx ctx, String action, {{ D }} d, Errors errors, boolean asDetail) {
 {% for f in ent.api_fields if not f.readonly %}
         {
             var v = d.{{ f.n.camel }}();
@@ -173,7 +241,7 @@ public class {{ fn.id }}_mod {
         }
 {% endfor %}
 {% for r in fn.refs %}
-        if ({% for c in r.cols %}d.{{ camel[c] }}() != null && !errors.has("{{ c }}"){{ ' && ' if not loop.last }}{% endfor %}
+        if ({% if r.composition %}!asDetail && {% endif %}{% for c in r.cols %}d.{{ camel[c] }}() != null && !errors.has("{{ c }}"){{ ' && ' if not loop.last }}{% endfor %}
 
                 && sql.count(ctx, FID + ".ref.{{ r.slug }}", P.of({% for c in r.cols %}"{{ c }}", d.{{ camel[c] }}(){{ ', ' if not loop.last }}{% endfor %})) == 0)
             errors.add("{{ r.cols[0] }}", "REFERENCE", "{{ r.label }} không tồn tại");
@@ -184,12 +252,15 @@ public class {{ fn.id }}_mod {
         return new {{ D }}(
 {% for f in ent.api_fields %}
 {% if f.name == 'owner_unit' %}
-                in.ownerUnit() != null ? in.ownerUnit() : ctx.primaryUnit(){{ ',' if not loop.last }}
+                in.ownerUnit() != null ? in.ownerUnit() : ctx.primaryUnit(){{ ',' if not loop.last or fn.details }}
 {% elif f.default is not none and not f.system %}
-                in.{{ f.n.camel }}() != null ? in.{{ f.n.camel }}() : {{ m.jdefault(f) }}{{ ',' if not loop.last }}
+                in.{{ f.n.camel }}() != null ? in.{{ f.n.camel }}() : {{ m.jdefault(f) }}{{ ',' if not loop.last or fn.details }}
 {% else %}
-                in.{{ f.n.camel }}(){{ ',' if not loop.last }}
+                in.{{ f.n.camel }}(){{ ',' if not loop.last or fn.details }}
 {% endif %}
+{% endfor %}
+{% for d in fn.details %}
+                in.{{ d.n.camel }}(){{ ',' if not loop.last }}
 {% endfor %}
         );
     }

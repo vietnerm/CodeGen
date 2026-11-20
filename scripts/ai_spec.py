@@ -22,7 +22,11 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMA = json.loads((ROOT / 'schema/function-spec.schema.json').read_text(encoding='utf-8'))
+sys.path.insert(0, str(ROOT))
+from codegen import ai, model  # noqa: E402
+
+BASE_SCHEMA = json.loads((ROOT / 'schema/function-spec.schema.json').read_text(encoding='utf-8'))
+SCHEMA = BASE_SCHEMA            # thay bằng schema động (chỉ nhận chức năng/codemap/cột đang có) khi chạy
 MAX_TRIES = 3
 
 SYSTEM = """Bạn chuyển mô tả chức năng thành SPEC JSON đúng schema. /no_think
@@ -36,15 +40,19 @@ Luật:
 - Mỗi field có example hợp lệ (đúng pattern, đúng codemap). Trường tìm kiếm thì thêm search eq|like.
 - actions: ["SEARCH","GET","CREATE","UPDATE","DELETE"] trừ khi mô tả nói khác.
 - Luật nghiệp vụ không diễn tả được bằng ràng buộc trường → thêm hooks (phase VALIDATE, name camelCase, description).
+Quan hệ với bảng CÓ SẴN (xem NGỮ CẢNH — chỉ dùng mã chức năng/cột có trong đó):
+- Cột trỏ tới bảng khác → relations: {cols: [cột của bảng mới], parent: <mã chức năng cha>}; cột phải cùng kiểu/độ dài với khoá cha.
+- Muốn hiện tên của bảng cha → thêm lookup: [<cột hiển thị của cha>], vd lookup: ["device_name"].
+- Bảng mới là DÒNG CHI TIẾT thuộc về bản ghi cha (xoá cha thì xoá dòng) → composition: true, as: <tên mảng số nhiều>,
+  pk = khoá cha + 1 cột số thứ tự kiểu INT.
+- Tham chiếu thường mà cha bị xoá thì chặn → on_delete: RESTRICT.
 """
 
 
-def context():
-    cm = yaml.safe_load((ROOT / 'spec/_codemaps.yaml').read_text(encoding='utf-8'))['codemap_groups']
-    codemaps = {g: [c['code'] for c in d['codes']] for g, d in cm.items()}
-    example = yaml.safe_load((ROOT / 'spec/AT/A0/ATA0_0110.yaml').read_text(encoding='utf-8'))
-    example.pop('tests', None)
-    return codemaps, example
+def example_spec():
+    ex = yaml.safe_load((ROOT / 'spec/AT/A0/ATA0_0110.yaml').read_text(encoding='utf-8'))
+    ex.pop('tests', None)
+    return ex
 
 
 def ask(messages):
@@ -73,24 +81,35 @@ def validate():
     return p.returncode == 0, (p.stdout + p.stderr).strip()
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--function-id', required=True)
-    ap.add_argument('--request', required=True)
-    ap.add_argument('--parent', default='')
-    a = ap.parse_args()
-    fid = a.function_id
+def generate(fid, request, parent='', log=print):
+    """Sinh spec mới cho fid. Trả (ok, đường_dẫn, ngữ_cảnh_đã_dùng)."""
+    global SCHEMA
     module, sys_, sub = fid[:4], fid[:2], fid[2:4]
     dest = ROOT / 'spec' / sys_ / sub / f"{fid}.yaml"
     if dest.exists():
-        sys.exit(f"✗ {dest.relative_to(ROOT)} đã có — AI chỉ tạo mới; sửa spec có sẵn thì người sửa")
-    codemaps, example = context()
+        log(f"✗ {dest.relative_to(ROOT)} đã có — AI chỉ tạo mới; sửa spec có sẵn thì người sửa")
+        return False, dest, None
+    ir, rep = model.build_ir(ROOT / 'spec')
+    if rep.errors:
+        log("✗ spec hiện tại đang lỗi — sửa trước:\n" + '\n'.join(rep.errors))
+        return False, dest, None
+    menus = {f['id']: f for f in ir['functions']}
+    if parent and parent not in menus:
+        log(f"✗ chức năng cha {parent} không tồn tại. Nút menu đang có: "
+            + ', '.join(f"{f['id']} ({f['name']})" for f in menus.values() if f['type'] == 'MENU')
+            + f". Module mới ({fid[:4]}) cần kiến trúc sư tạo spec/{sys_}/{sub}/_menu.yaml trước.")
+        return False, dest, None
+    if parent and parent[:4] != module:
+        log(f"✗ chức năng cha {parent} thuộc module khác {module} — mã chức năng và cha phải cùng module")
+        return False, dest, None
+    SCHEMA = ai.dynamic_schema(ir, BASE_SCHEMA)
+    ctx = ai.context(ir, request + ' ' + parent)
     schema_name = next((yaml.safe_load(p.read_text(encoding='utf-8')).get('schema')
                         for p in (ROOT / 'spec' / sys_ / sub).glob('*.yaml')), sys_.lower())
-    user = (f"Codemap được dùng: {json.dumps(codemaps, ensure_ascii=False)}\n"
-            f"Ví dụ spec hợp lệ:\n{json.dumps(example, ensure_ascii=False)}\n\n"
+    user = (f"NGỮ CẢNH (bảng/chức năng có sẵn liên quan, codemap): {json.dumps(ctx, ensure_ascii=False)}\n\n"
+            f"Ví dụ spec hợp lệ:\n{json.dumps(example_spec(), ensure_ascii=False)}\n\n"
             f"Tạo spec cho: module={module}, schema={schema_name}, function.id={fid}"
-            f"{', function.parent=' + a.parent if a.parent else ''}.\nMô tả: {a.request}")
+            f"{', function.parent=' + parent if parent else ''}.\nMô tả: {request}")
     messages = [{'role': 'system', 'content': SYSTEM}, {'role': 'user', 'content': user}]
     dest.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(1, MAX_TRIES + 1):
@@ -102,20 +121,31 @@ def main():
         else:
             spec.update(module=module, schema=schema_name)              # không để AI chọn sai
             spec.setdefault('function', {})['id'] = fid
-            if a.parent:
-                spec['function']['parent'] = a.parent
+            if parent:
+                spec['function']['parent'] = parent
             dest.write_text(f"# Sinh bởi AI (scripts/ai_spec.py) — người duyệt trước khi merge\n"
                             + yaml.safe_dump(spec, allow_unicode=True, sort_keys=False, width=110), encoding='utf-8')
             ok, out = validate()
             if ok:
-                print(f"✓ lần {attempt}: {dest.relative_to(ROOT)} hợp lệ\n{out}")
-                return
+                log(f"✓ lần {attempt}: {dest.relative_to(ROOT)} hợp lệ\n{out}")
+                return True, dest, ctx
             err = '\n'.join(line for line in out.splitlines() if line.startswith('✗'))
-        print(f"✗ lần {attempt}:\n{err}")
+        log(f"✗ lần {attempt}:\n{err}")
         messages += [{'role': 'assistant', 'content': raw},
                      {'role': 'user', 'content': f"Spec chưa hợp lệ, sửa và trả lại TOÀN BỘ JSON:\n{err}"}]
     dest.unlink(missing_ok=True)
-    sys.exit(f"✗ sau {MAX_TRIES} lần vẫn không hợp lệ — cần người viết spec")
+    log(f"✗ sau {MAX_TRIES} lần vẫn không hợp lệ — cần người viết spec")
+    return False, dest, ctx
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--function-id', required=True)
+    ap.add_argument('--request', required=True)
+    ap.add_argument('--parent', default='')
+    a = ap.parse_args()
+    ok, _, _ = generate(a.function_id, a.request, a.parent)
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == '__main__':

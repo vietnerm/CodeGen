@@ -5,6 +5,9 @@ CodeGen — spec YAML → IR → target packs.
     python generator.py validate            # kiểm tra spec + SQL (exit 1 nếu lỗi) — dùng trong CI
     python generator.py build [-o out]      # sinh toàn bộ dự án vào out/
     python generator.py ir                  # in IR (JSON) — đầu vào cho agent / target mới
+    python generator.py context "mô tả"     # phần IR liên quan tới mô tả (ngữ cảnh cho AI)
+    python generator.py impact ATA0_0110    # đổi chức năng này ảnh hưởng tới đâu
+    python generator.py schema              # JSON schema động cho AI (chỉ nhận giá trị đang có)
 """
 from __future__ import annotations
 
@@ -17,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from codegen import model, render, sqlgen  # noqa: E402
+from codegen import ai, model, render, sqlgen  # noqa: E402
 
 
 def check_sql(ir) -> list[str]:
@@ -46,12 +49,28 @@ def check_sql(ir) -> list[str]:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('command', choices=['validate', 'build', 'ir'])
+    ap.add_argument('command', choices=['validate', 'build', 'ir', 'context', 'impact', 'schema'])
+    ap.add_argument('arg', nargs='?', help='mô tả (context) hoặc mã chức năng (impact)')
     ap.add_argument('--spec', type=Path, default=ROOT / 'spec')
     ap.add_argument('-o', '--out', type=Path, default=ROOT / 'out')
     args = ap.parse_args()
 
     ir, rep = model.build_ir(args.spec)
+    if args.command in ('context', 'impact', 'schema'):          # công cụ cho agent: in JSON, không ồn
+        if rep.errors:
+            print('\n'.join(rep.errors), file=sys.stderr)
+            sys.exit(1)
+        if args.command == 'context':
+            res = ai.context(ir, args.arg or '')
+        elif args.command == 'impact':
+            try:
+                res = ai.impact(ir, args.arg or '')
+            except KeyError:
+                sys.exit(f"không có chức năng {args.arg}")
+        else:
+            res = ai.dynamic_schema(ir, json.loads((ROOT / 'schema/function-spec.schema.json').read_text(encoding='utf-8')))
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return
     if not rep.errors:
         rep.errors += [f"✗ sql {e}" for e in check_sql(ir)]
     for w in rep.warnings:

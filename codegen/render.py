@@ -49,6 +49,7 @@ def _env(tdir: Path, types: dict):
 
     def ftype(f):
         return tmap[f['type']]
+    env.globals.update(zip=zip)
     env.filters.update({
         'ftype': ftype, 'tojson': lambda v, indent=None: json.dumps(v, ensure_ascii=False, indent=indent),
         'lit': lit, 'pick': lambda d, *keys: {k: d.get(k) for k in keys},
