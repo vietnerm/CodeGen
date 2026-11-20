@@ -82,6 +82,25 @@ if [ "${SKIP_UI:-0}" != 1 ] && python -c "import playwright" 2>/dev/null; then
   if ! BASE_URL="http://localhost:$PORT" python out/tests/ui/run_ui.py; then
     echo "── xem ảnh trong out/ui/ ──"; cat out/ui/report.md 2>/dev/null | head -60; exit 1
   fi
+
+  # 6c. Lượt rút gọn cho LAYOUT THỨ HAI: UI_LAYOUT đè ui.layout khi sinh lại (chỉ PostgreSQL —
+  # publish ảnh vào PR chạy ở matrix postgresql, tránh tốn thời gian 2 DB cho cùng 1 ảnh)
+  if [ "$DB_TYPE" = postgresql ]; then
+    step "6c. Test giao diện layout thứ hai (UI_LAYOUT=vertical-transparent, rút gọn)"
+    kill $APP_PID 2>/dev/null || true; wait $APP_PID 2>/dev/null || true
+    KEEP_UI="${TMPDIR:-/tmp}/ui.keep"             # generator build xoá lại out/ — giữ ảnh layout 1 NGOÀI out/
+    rm -rf "$KEEP_UI"; cp -r out/ui "$KEEP_UI"
+    UI_LAYOUT=vertical-transparent python generator.py build > /dev/null
+    rm -rf out/ui; mv "$KEEP_UI" out/ui
+    mkdir -p out/logs
+    mvn -B -q -f out/app/pom.xml package -DskipTests
+    java -jar out/app/target/app.jar > out/logs/app-layout2.log 2>&1 &
+    APP_PID=$!
+    if ! BASE_URL="http://localhost:$PORT" UI_OUT=out/ui2 python out/tests/ui/run_ui.py --quick; then
+      echo "── xem ảnh layout 2 trong out/ui2/ ──"; cat out/ui2/report.md 2>/dev/null | head -40; exit 1
+    fi
+    python scripts/merge_ui2.py layout-vertical-transparent
+  fi
 else
   echo "(bỏ qua test giao diện: SKIP_UI=1 hoặc chưa cài playwright)"
 fi
