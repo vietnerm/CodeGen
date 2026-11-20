@@ -1,0 +1,31 @@
+module: ATA0
+schema: at
+
+function:
+  id: ATA0_0121
+  name: Lịch thanh toán hợp đồng
+  parent: ATA0_0100
+  sort: 21
+  description: Các kỳ thanh toán của một hợp đồng bảo trì (bảng con của ATA0_0120).
+
+entity:
+  name: maint_payment
+  label: Kỳ thanh toán
+  pk: [contract_no, seq]
+  profiles: [tenant, owner_unit, audit, versioned]
+  fields:
+    - {name: contract_no, type: TEXT, length: 30, label: Số hợp đồng, example: HD000001, search: eq}
+    - {name: seq, type: INT, label: Kỳ, min: 1, max: 999, example: 1}
+    - {name: due_date, type: DATE, label: Hạn thanh toán, example: '2026-03-31'}
+    - {name: amount, type: DECIMAL, precision: 18, scale: 2, label: Số tiền, min: 0, example: 30000000}
+    - {name: paid, type: TEXT, length: 1, label: Đã thanh toán, enum: ['Y', 'N'], default: 'N', example: 'N', search: eq}
+    - {name: note, type: TEXT, length: 500, label: Ghi chú, nullable: true, example: Kỳ 1}
+
+# composition: kỳ thanh toán THUỘC VỀ hợp đồng.
+#  - hợp đồng nhận/trả mảng `payments`, lưu cả hợp đồng + các kỳ trong 1 transaction
+#  - xoá hợp đồng ⇒ xoá các kỳ (CASCADE); seq để trống ⇒ tự đánh 1, 2, 3…
+#  - lookup: hiện thêm tên nhà cung cấp của hợp đồng
+relations:
+  - {cols: [contract_no], parent: ATA0_0120, composition: true, as: payments, lookup: [vendor_name]}
+
+actions: [SEARCH, GET, CREATE, UPDATE, DELETE]

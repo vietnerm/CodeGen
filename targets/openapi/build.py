@@ -32,6 +32,8 @@ def field_schema(f, cm):
         s['x-codemap'] = f['codemap']
         desc.append(f"CODEMAP `{f['codemap']}` (lấy danh sách hiệu lực: GET /api/v1/codemap/{f['codemap']}); "
                     f"mã chuẩn: " + ', '.join(f"{c['code']}={c['label']}" for c in g['codes']))
+    if f.get('lookup'):
+        desc.append(f"chỉ đọc — lấy từ {f['lookup']['parent_table']}.{f['lookup']['parent_field']}")
     if f['readonly']:
         s['readOnly'] = True
     if f['example'] is not None:
@@ -103,7 +105,7 @@ def components():
     }
 
 
-def function_doc(ir, fn, e, cm):
+def function_doc(ir, fn, e, cm, ents=None):
     fid = fn['id']
     pascal = fid.replace('_', '')
     sch = {
@@ -118,6 +120,22 @@ def function_doc(ir, fn, e, cm):
             'items': {'type': 'array', 'items': {'$ref': f'#/components/schemas/{pascal}'}},
             'total': {'type': 'integer', 'format': 'int64'}, 'page': {'type': 'integer'}, 'size': {'type': 'integer'}}},
     }
+    for d in fn['details']:                                   # master–detail: mảng dòng chi tiết
+        ce = ents[d['child_entity']]
+        cname = d['child_function'].replace('_', '')
+        line_fields = [f for f in ce['api_fields'] if f['name'] not in d['cols'] and f['name'] != 'owner_unit']
+        sch[f"{cname}Line"] = obj([f for f in line_fields if not f['readonly']], cm,
+                                  required=[f['name'] for f in line_fields if f['required']
+                                            and not (f['name'] in ce['pk'] and f['type'] in ('INT', 'BIGINT'))])
+        sch[cname] = obj(ce['api_fields'], cm)
+        desc = (f"Chi tiết {d['child_function']} ({d['label']}). Gửi mảng ⇒ THAY TOÀN BỘ chi tiết trong cùng "
+                f"transaction; bỏ trống trường ⇒ giữ nguyên. Cột liên kết {d['cols']} và owner_unit lấy từ bản ghi cha; "
+                f"khoá số nguyên để trống ⇒ tự đánh số 1, 2, 3…")
+        sch[pascal]['properties'][d['as']] = {'type': 'array', 'items': {'$ref': f'#/components/schemas/{cname}'},
+                                              'description': desc}
+        for k in (f"{pascal}Create", f"{pascal}Update"):
+            sch[k]['properties'][d['as']] = {'type': 'array', 'items': {'$ref': f'#/components/schemas/{cname}Line'},
+                                             'description': desc}
     sch[f"{pascal}Update"]['properties'].pop('row_version', None)
     if e['versioned']:
         sch[f"{pascal}Update"]['properties']['row_version'] = {
@@ -127,6 +145,8 @@ def function_doc(ir, fn, e, cm):
     ext = {'x-function-id': fid, 'x-module': fn['module'],
            'x-relations': [{'cols': r['cols'], 'parent': r['parent'], 'on_delete': r['on_delete']} for r in fn['refs']],
            'x-children': [{'child': r['child'], 'cols': r['cols'], 'on_delete': r['on_delete']} for r in fn['children']],
+           'x-details': [{'as': d['as'], 'function': d['child_function'], 'cols': d['cols']} for d in fn['details']],
+           'x-master': ({'function': fn['master']['parent_function'], 'cols': fn['master']['cols']} if fn['master'] else None),
            'x-hooks': [{'phase': h['phase'], 'name': h['name'], 'actions': h['actions'],
                         'description': h['description']} for h in fn['hooks']]}
     errs = lambda *codes: {c: {'$ref': f'#/components/responses/E{c}'} for c in codes}
@@ -174,7 +194,7 @@ def build(ir, ctx):
     files = {}
     for fn in [f for f in ir['functions'] if f['entity']]:
         e = ctx['ents'][fn['entity']]
-        paths, sch = function_doc(ir, fn, e, cm)
+        paths, sch = function_doc(ir, fn, e, cm, ctx['ents'])
         merged_paths.update(paths)
         merged_schemas.update(sch)
         comp = components()

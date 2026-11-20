@@ -169,13 +169,17 @@ def test_core(t: T):
 
 
 # ─────────────────────────── test 1 function ───────────────────────────
-def ensure_parents(fx, body, maker):
+def ensure_parents(fx, body, maker, depth=0):
+    """Tạo (đệ quy) các bản ghi cha mà body tham chiếu tới — 201 hoặc 409 đều được."""
+    if depth > 5:
+        return
     for r in fx['refs']:
         pfx = FX['functions'][r['parent_fid']]
         pbody = dict(pfx['example'])
         for c, p in zip(r['cols'], r['parent_cols']):
             pbody[p] = body[c]
-        http('POST', pfx['base'], token=token(maker), body=pbody)       # 201 hoặc 409 đều được
+        ensure_parents(pfx, pbody, maker, depth + 1)
+        http('POST', pfx['base'], token=token(maker), body=pbody)
 
 
 def test_function(t: T, fid):
@@ -213,6 +217,12 @@ def test_function(t: T, fid):
             {k: (created.get(k), v) for k, v in ex.items() if not same(created.get(k), v)})
     if fx['versioned']:
         t.check('row_version khởi tạo = 0', created.get('row_version') == 0, created.get('row_version'))
+    for lk in fx['lookups']:                                              # lookup: giá trị lấy từ bảng cha
+        pfx = FX['functions'][lk['parent_fid']]
+        prow = http('GET', keypath(pfx, {p: ex[c] for c, p in zip(lk['cols'], lk['parent_cols'])}), token=tk)
+        t.check(f"lookup {lk['field']} = {lk['parent_fid']}.{lk['parent_field']}",
+                prow.status == 200 and same(created.get(lk['field']), prow.body.get(lk['parent_field'])),
+                (created.get(lk['field']), prow.body.get(lk['parent_field']) if prow.body else prow))
     r = http('POST', fx['base'], token=tk, body=ex)
     t.check('CREATE trùng khoá → 409 E_DUPLICATE', r.status == 409 and r.body.get('code') == 'E_DUPLICATE', r)
 
@@ -280,6 +290,42 @@ def test_function(t: T, fid):
             r = http('PUT', path, token=tk, body=b2)
             t.check('UPDATE thiếu row_version → 400', r.status == 400 and r.detail('row_version', 'REQUIRED'), r)
 
+    cascade_paths = []
+    for dt in fx['details']:                                              # master–detail: lưu lồng 1 transaction
+        cfx = FX['functions'][dt['child_fid']]
+        cur = http('GET', path, token=tk).body
+        b = dict(cur, **{dt['as']: [dt['line1'], dt['line2']]})
+        r = http('PUT', path, token=tk, body=b)
+        lines = (r.body or {}).get(dt['as']) or []
+        t.check(f"PUT kèm 2 dòng {dt['as']} → 200, trả 2 dòng", r.status == 200 and len(lines) == 2, r)
+        if len(lines) == 2:
+            t.check(f"dòng {dt['as']} gắn đúng khoá cha", all(same(x.get(c), ex[p]) for x in lines
+                    for c, p in zip(dt['cols'], dt['parent_cols'])), lines)
+            for c in dt['auto']:
+                t.check(f"dòng 2 tự đánh số {c}", same(lines[1].get(c), 2), lines[1].get(c))
+            if fx['owner_unit'] and cfx['owner_unit']:
+                t.check(f"dòng {dt['as']} lấy đơn vị của bản ghi cha", all(x.get('owner_unit') == cur.get('owner_unit')
+                        for x in lines), [x.get('owner_unit') for x in lines])
+            lp = keypath(cfx, lines[1])
+            t.check(f"dòng chi tiết đọc được qua API {dt['child_fid']}", http('GET', lp, token=tk).status == 200)
+            cascade_paths.append(keypath(cfx, lines[0]))
+            cur = http('GET', path, token=tk).body
+            r = http('PUT', path, token=tk, body=dict(cur, **{dt['as']: [dt['line1']]}))
+            t.check(f"PUT 1 dòng ⇒ thay toàn bộ, còn 1", r.status == 200 and len(r.body.get(dt['as']) or []) == 1, r)
+            t.check("dòng bị bỏ đã xoá", http('GET', lp, token=tk).status == 404)
+            cur = http('GET', path, token=tk).body
+            keep = dict(cur)
+            keep.pop(dt['as'], None)
+            r = http('PUT', path, token=tk, body=keep)
+            t.check(f"PUT không gửi {dt['as']} ⇒ giữ nguyên chi tiết", r.status == 200 and len(r.body.get(dt['as']) or []) == 1, r)
+            if dt['invalid']:
+                bad = dict(dt['line1'], **{dt['invalid']['field']: dt['invalid']['value']})
+                cur = http('GET', path, token=tk).body
+                r = http('PUT', path, token=tk, body=dict(cur, **{dt['as']: [bad]}))
+                f = f"{dt['as']}[0].{dt['invalid']['field']}"
+                t.check(f"dòng sai → 400 {f} {dt['invalid']['code']}", r.status == 400 and r.detail(f, dt['invalid']['code']), r)
+        rv = http('GET', path, token=tk).body.get('row_version')
+
     for case in fx['tests']:                                              # test do spec khai báo (hook…)
         b = dict(ex, **case.get('patch', {}))
         if case['action'] == 'CREATE':
@@ -294,6 +340,8 @@ def test_function(t: T, fid):
             http('DELETE', keypath(fx, b), token=tk, query={'row_version': r.body.get('row_version')})
 
     for ch in fx['children']:
+        if ch.get('composition'):
+            continue                                                      # đã test ở phần master–detail
         cfx = FX['functions'][ch['child_fid']]
         cb = dict(cfx['example'])
         for c, p in zip(ch['cols'], ch['parent_cols']):
@@ -322,6 +370,8 @@ def test_function(t: T, fid):
     r = http('DELETE', path, token=tk, query={'row_version': rv})
     t.check('DELETE → 204', r.status == 204, r)
     t.check('GET sau xoá → 404', http('GET', path, token=tk).status == 404)
+    for cp in cascade_paths:
+        t.check('xoá bản ghi cha ⇒ chi tiết bị xoá theo (CASCADE)', http('GET', cp, token=tk).status == 404)
 
 
 def main():

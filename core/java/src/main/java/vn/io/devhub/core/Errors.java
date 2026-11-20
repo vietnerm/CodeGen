@@ -18,6 +18,15 @@ public class Errors {
 
     public boolean isEmpty() { return items.isEmpty(); }
 
+    public List<ApiException.Detail> items() { return List.copyOf(items); }
+
+    /** Gộp lỗi của 1 dòng chi tiết với tiền tố, vd payments[0].amount */
+    public Errors merge(String prefix, Errors other) {
+        for (ApiException.Detail d : other.items)
+            items.add(new ApiException.Detail(prefix + "." + d.field(), d.code(), d.message()));
+        return this;
+    }
+
     public void throwIfAny() {
         if (!items.isEmpty()) {
             throw new ApiException(400, "E_VALIDATION", "Dữ liệu không hợp lệ", items);

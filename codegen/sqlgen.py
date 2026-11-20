@@ -172,28 +172,50 @@ def render_catalog(stmts: list[dict], dialect: str, header: str) -> str:
 def function_statements(ir, fn, ent_of) -> list[dict]:
     e = ent_of(fn['entity'])
     t, fid = e['table'], fn['id']
-    cols = ', '.join(f['name'] for f in e['api_fields'])
+    # Đọc dùng alias t + LEFT JOIN cho lookup (cột hiển thị của bảng cha); ghi không dùng alias.
+    cols = ', '.join(f"t.{f['name']}" for f in e['base_api_fields'])
+    joins, jcols = [], []
+    for lf in e['lookup_fields']:
+        lk = lf['lookup']
+        r = next(x for x in fn['refs'] if x['slug'] == lk['rel'])
+        j = lk['join']
+        on = ' AND '.join(f"{j}.{p} = t.{c}" for c, p in zip(r['cols'], r['parent_cols']))
+        if r['tenant_scoped']:
+            on = f"{j}.tenant_id = t.tenant_id AND {on}"
+        joins.append(f" LEFT JOIN {lk['parent_table']} {j} ON {on}")
+        jcols.append(f"{j}.{lk['parent_field']} AS {lf['name']}")
+    sel_cols = ', '.join([cols] + jcols)
     scope = []
     if e['tenant']:
-        scope.append('tenant_id = :_tenant')
+        scope.append('t.tenant_id = :_tenant')
     if e['owner_unit']:
-        scope.append('owner_unit IN (:_units)')
+        scope.append('t.owner_unit IN (:_units)')
     where_scope = ' AND '.join(scope) if scope else '1 = 1'
-    pk_cond = ' AND '.join(f"{c} = :{c}" for c in e['pk'])
-    ten = 'tenant_id = :_tenant AND ' if e['tenant'] else ''
-    ver = ' AND row_version = :row_version' if e['versioned'] else ''
+    pk_t = ' AND '.join(f"t.{c} = :{c}" for c in e['pk'])
+    src = f"{t} t{''.join(joins)}"
     out = [
-        stmt(f"{fid}.select", f"SELECT {cols} FROM {t} WHERE {where_scope}",
-             sort=','.join(e['sort_fields']), pk=','.join(e['pk'])),
-        stmt(f"{fid}.count", f"SELECT COUNT(*) AS cnt FROM {t} WHERE {where_scope}"),
+        stmt(f"{fid}.select", f"SELECT {sel_cols} FROM {src} WHERE {where_scope}",
+             sort=','.join(e['sort_fields']), pk=','.join(e['pk']), alias='t'),
+        stmt(f"{fid}.count", f"SELECT COUNT(*) AS cnt FROM {t} t WHERE {where_scope}"),
     ]
     for f in e['search_fields']:
         c = f['name']
         if f['search'] == 'like':
-            out.append(stmt(f"{fid}.filter.{c}", f"LOWER({c}) LIKE LOWER(:f_{c})", 'cond', like='true'))
+            out.append(stmt(f"{fid}.filter.{c}", f"LOWER(t.{c}) LIKE LOWER(:f_{c})", 'cond', like='true'))
         else:
-            out.append(stmt(f"{fid}.filter.{c}", f"{c} = :f_{c}", 'cond'))
-    out.append(stmt(f"{fid}.get", f"SELECT {cols} FROM {t} WHERE {where_scope} AND {pk_cond}"))
+            out.append(stmt(f"{fid}.filter.{c}", f"t.{c} = :f_{c}", 'cond'))
+    out.append(stmt(f"{fid}.get", f"SELECT {sel_cols} FROM {src} WHERE {where_scope} AND {pk_t}"))
+    if fn['master']:                                      # bảng con: đọc các dòng của 1 bản ghi cha
+        m = fn['master']
+        mcond = ' AND '.join(f"t.{c} = :{c}" for c in m['cols'])
+        mten = 't.tenant_id = :_tenant AND ' if e['tenant'] else ''
+        order = ', '.join(f"t.{c}" for c in e['pk'])
+        out.append(stmt(f"{fid}.by_master", f"SELECT {sel_cols} FROM {src} WHERE {mten}{mcond} ORDER BY {order}"))
+    pk_cond = ' AND '.join(f"{c} = :{c}" for c in e['pk'])
+    ten = 'tenant_id = :_tenant AND ' if e['tenant'] else ''
+    ver = ' AND row_version = :row_version' if e['versioned'] else ''
+    scope = (['tenant_id = :_tenant'] if e['tenant'] else []) + (['owner_unit IN (:_units)'] if e['owner_unit'] else [])
+    where_scope = ' AND '.join(scope) if scope else '1 = 1'   # câu ghi (UPDATE/DELETE) không dùng alias
     out.append(stmt(f"{fid}.exists", f"SELECT COUNT(*) AS cnt FROM {t} WHERE {ten}{pk_cond}"))
 
     ins_c, ins_v = [], []

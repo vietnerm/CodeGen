@@ -182,8 +182,7 @@
         "additionalProperties": false,
         "required": [
           "cols",
-          "parent",
-          "on_delete"
+          "parent"
         ],
         "properties": {
           "cols": {
@@ -203,6 +202,23 @@
               "CASCADE",
               "NULLIFY"
             ]
+          },
+          "lookup": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "description": "Cột của bảng cha hiện kèm khi đọc (JOIN, chỉ đọc)"
+          },
+          "composition": {
+            "type": "boolean",
+            "description": "Bảng này THUỘC VỀ bảng cha (master–detail): lưu lồng, xoá theo cha"
+          },
+          "as": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Tên mảng chi tiết trên bảng cha khi composition"
           }
         }
       }

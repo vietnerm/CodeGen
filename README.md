@@ -62,6 +62,38 @@ API sinh ra cho mỗi function: `GET/POST {base}`, `GET/PUT/DELETE {base}/{pk}` 
 Đã có sẵn: quyền theo action, lọc tenant + đơn vị, validate (bắt buộc/độ dài/pattern/enum/khoảng/CODEMAP),
 kiểm tham chiếu (không FK), RESTRICT/CASCADE khi xoá, khoá lạc quan `row_version`, audit, phân trang/lọc/sắp xếp.
 
+## Quan hệ giữa bảng/chức năng (khai báo trong spec, sinh tất định)
+
+```yaml
+relations:
+  - {cols: [device_id], parent: ATA0_0110, on_delete: RESTRICT, lookup: [device_name]}     # tham chiếu + hiện tên
+  - {cols: [contract_no], parent: ATA0_0120, composition: true, as: payments}               # dòng chi tiết
+```
+
+| Khai báo | Sinh ra |
+|---|---|
+| `parent` + `on_delete` | kiểm tồn tại khi lưu (400 `REFERENCE`), RESTRICT/CASCADE/NULLIFY khi xoá cha, index, kiểm toàn vẹn |
+| `lookup` | SELECT có LEFT JOIN, trường chỉ đọc trong API/OpenAPI, ô chọn có gợi ý trên trang |
+| `composition` + `as` | cha nhận/trả mảng `as`; gửi mảng ⇒ thay toàn bộ dòng trong 1 transaction; khoá số trống ⇒ tự đánh số; xoá cha ⇒ xoá dòng; bảng chi tiết sửa trực tiếp trên trang |
+
+## AI hiểu hệ thống qua IR (không phải trí nhớ của model)
+
+```bash
+python generator.py context "lịch bảo dưỡng cho thiết bị ATM"   # bảng/chức năng/codemap liên quan
+python generator.py impact ATA0_0120                              # đổi chức năng này ảnh hưởng tới đâu
+python generator.py schema                                        # JSON schema động: chỉ nhận chức năng/codemap/cột đang có
+```
+
+`ai_spec.py` đưa **ngữ cảnh** này vào prompt và ép output theo **schema động** ⇒ model nhỏ không bịa được tên bảng/cột.
+
+## Issue → AI tự xử lý
+
+Tạo issue bằng form **🤖 AI: chức năng** (nhãn `ai`), workflow `ai-issue`:
+
+- **Chức năng mới** → tìm ngữ cảnh trong IR → AI viết spec → guard → pipeline đầy đủ → PR `Closes #N` + comment kết quả
+- **Sửa / Lỗi** → phân tích ảnh hưởng từ IR (bảng, quan hệ, lookup, master–detail, file sinh) → comment + nhãn `needs-human`
+- Comment `/ai` để chạy lại. Chỉ chạy với OWNER/MEMBER/COLLABORATOR.
+
 ## Luật giữ chuẩn (tự động)
 
 - **sqlglot lint**: cấm `ON CONFLICT`, `RETURNING`, `ILIKE`, `= ANY`, toán tử JSON/mảng, `LIMIT`, DDL, `SELECT *`

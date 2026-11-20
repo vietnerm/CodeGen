@@ -1,3 +1,5 @@
 {% macro pkg(fn, layer) %}{{ project.package }}.{{ fn.sys | lower }}.{{ fn.sub | lower }}.{{ fn.id | lower }}.{{ layer }}{% endmacro %}
 {% macro jdefault(f) %}{% if f.type == 'TEXT' %}"{{ f.default }}"{% elif f.type == 'INT' %}{{ f.default }}{% elif f.type == 'BIGINT' %}{{ f.default }}L{% elif f.type == 'DECIMAL' %}new java.math.BigDecimal("{{ f.default }}"){% elif f.type == 'BOOL' %}{{ 'true' if f.default in [true, 'Y', 'true'] else 'false' }}{% else %}null{% endif %}{% endmacro %}
 {% macro jnum(f, v) %}{% if f.type == 'DECIMAL' %}new java.math.BigDecimal("{{ v }}"){% elif f.type == 'BIGINT' %}{{ v }}L{% else %}{{ v }}{% endif %}{% endmacro %}
+{% macro dto_of(fid) %}{{ project.package }}.{{ fid[:2] | lower }}.{{ fid[2:4] | lower }}.{{ fid | lower }}.mod.{{ fid }}_dto{% endmacro %}
+{% macro mod_of(fid) %}{{ project.package }}.{{ fid[:2] | lower }}.{{ fid[2:4] | lower }}.{{ fid | lower }}.mod.{{ fid }}_mod{% endmacro %}

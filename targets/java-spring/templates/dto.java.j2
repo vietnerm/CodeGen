@@ -14,13 +14,20 @@ import vn.io.devhub.core.Conv;
  */
 public record {{ fn.id }}_dto(
 {% for f in ent.api_fields %}
-        {{ f | ftype }} {{ f.n.camel }}{{ ',' if not loop.last }}
+        {{ f | ftype }} {{ f.n.camel }}{{ ',' if not loop.last or fn.details }}{% if f.lookup is defined %}   // lookup ← {{ f.lookup.parent_table }}.{{ f.lookup.parent_field }}{% endif %}
+
+{% endfor %}
+{% for d in fn.details %}
+        java.util.List<{{ m.dto_of(d.child_function) }}> {{ d.n.camel }}{{ ',' if not loop.last }}   // chi tiết {{ d.child_function }} {{ d.label }}
 {% endfor %}
 ) {
     public static {{ fn.id }}_dto of(Map<String, Object> r) {
         return new {{ fn.id }}_dto(
 {% for f in ent.api_fields %}
-                Conv.{{ types.conv[f.type] }}(r, "{{ f.name }}"){{ ',' if not loop.last }}
+                Conv.{{ types.conv[f.type] }}(r, "{{ f.name }}"){{ ',' if not loop.last or fn.details }}
+{% endfor %}
+{% for d in fn.details %}
+                null{{ ',' if not loop.last }}
 {% endfor %}
         );
     }
@@ -29,10 +36,50 @@ public record {{ fn.id }}_dto(
     public {{ fn.id }}_dto withKey({% for f in ent.pk_fields %}{{ f | ftype }} {{ f.n.camel }}{{ ', ' if not loop.last }}{% endfor %}) {
         return new {{ fn.id }}_dto(
 {% for f in ent.api_fields %}
-                {% if f.name in ent.pk %}{{ f.n.camel }}{% else %}this.{{ f.n.camel }}{% endif %}{{ ',' if not loop.last }}
+                {% if f.name in ent.pk %}{{ f.n.camel }}{% else %}this.{{ f.n.camel }}{% endif %}{{ ',' if not loop.last or fn.details }}
+{% endfor %}
+{% for d in fn.details %}
+                this.{{ d.n.camel }}{{ ',' if not loop.last }}
 {% endfor %}
         );
     }
+{% for d in fn.details %}
+
+    /** Bản sao kèm danh sách chi tiết {{ d.as }}. */
+    public {{ fn.id }}_dto with{{ d.n.pascal }}(java.util.List<{{ m.dto_of(d.child_function) }}> v) {
+        return new {{ fn.id }}_dto(
+{% for f in ent.api_fields %}
+                this.{{ f.n.camel }},
+{% endfor %}
+{% for d2 in fn.details %}
+                {% if d2.as == d.as %}v{% else %}this.{{ d2.n.camel }}{% endif %}{{ ',' if not loop.last }}
+{% endfor %}
+        );
+    }
+{% endfor %}
+{% if fn.master %}
+{% set link = fn.master.cols %}
+
+    /**
+     * Gắn dòng chi tiết vào bản ghi cha: cột liên kết + đơn vị lấy từ cha;
+     * cột khoá số nguyên còn trống thì tự đánh số theo vị trí (index + 1).
+     */
+    public {{ fn.id }}_dto linkTo({% for c in link %}{{ ent.fields | selectattr('name', 'equalto', c) | map('ftype') | first }} {{ (ent.fields | selectattr('name', 'equalto', c) | first).n.camel }}, {% endfor %}String ownerUnitOfMaster, int index) {
+        return new {{ fn.id }}_dto(
+{% for f in ent.api_fields %}
+{% if f.name in link %}
+                {{ f.n.camel }}{{ ',' if not loop.last }}
+{% elif f.name == 'owner_unit' %}
+                ownerUnitOfMaster{{ ',' if not loop.last }}
+{% elif f.name in ent.pk and f.type in ['INT', 'BIGINT'] %}
+                this.{{ f.n.camel }} != null ? this.{{ f.n.camel }} : {% if f.type == 'BIGINT' %}(long) (index + 1){% else %}index + 1{% endif %}{{ ',' if not loop.last }}
+{% else %}
+                this.{{ f.n.camel }}{{ ',' if not loop.last }}
+{% endif %}
+{% endfor %}
+        );
+    }
+{% endif %}
 
     /** Khoá dạng chuỗi cho audit/thông báo. */
     public String key() {

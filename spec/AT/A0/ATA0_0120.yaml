@@ -26,8 +26,9 @@ entity:
        codemap: STATUS_AI, default: A, example: A, search: eq}
 
 # Không FK: generator sinh kiểm tra tồn tại khi lưu + RESTRICT khi xoá thiết bị.
+# lookup: đọc kèm tên thiết bị (JOIN, chỉ đọc) — API trả thêm device_name, trang hiện gợi ý chọn thiết bị.
 relations:
-  - {cols: [device_id], parent: ATA0_0110, on_delete: RESTRICT}
+  - {cols: [device_id], parent: ATA0_0110, on_delete: RESTRICT, lookup: [device_name]}
 
 actions: [SEARCH, GET, CREATE, UPDATE, DELETE]
 

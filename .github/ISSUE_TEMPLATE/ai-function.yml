@@ -1,0 +1,37 @@
+name: "🤖 AI: chức năng"
+description: Mô tả chức năng — AI tìm hiểu bảng/chức năng liên quan rồi tự sinh spec, chạy pipeline và mở PR
+title: "[AI] "
+labels: [ai]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Chức năng mới** → AI viết spec (chỉ được dùng bảng/codemap đang có), workflow sinh code + chạy toàn bộ test, đạt thì mở PR.
+        **Sửa / Lỗi** → AI phân tích ảnh hưởng từ metadata và comment lại; người hoặc agent lớn sửa.
+        Comment `/ai` để chạy lại sau khi bổ sung mô tả.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Loại yêu cầu
+      options: [Chức năng mới, Sửa chức năng có sẵn, Lỗi]
+    validations: {required: true}
+  - type: input
+    id: fid
+    attributes:
+      label: Mã chức năng
+      description: "Vd ATA0_0130. Để trống với chức năng mới ⇒ AI chọn mã còn trống dưới chức năng cha."
+      placeholder: ATA0_0130
+  - type: input
+    id: parent
+    attributes:
+      label: Chức năng cha
+      description: Nút menu chứa chức năng (chức năng mới)
+      placeholder: ATA0_0100
+  - type: textarea
+    id: desc
+    attributes:
+      label: Mô tả
+      description: |
+        Trường, kiểu, ràng buộc, mã CODEMAP, chức năng/bảng liên quan, luật nghiệp vụ.
+        Vd: "Lịch bảo dưỡng cho thiết bị ATM: mã lần (BDxxxx), thiết bị, ngày dự kiến, ngày thực hiện… Hiện tên thiết bị."
+    validations: {required: true}
