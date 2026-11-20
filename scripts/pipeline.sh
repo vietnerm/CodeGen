@@ -25,7 +25,9 @@ if [ "$DB_TYPE" = postgresql ]; then : "${DB_PORT:=5432}"; else : "${DB_PORT:=33
 : "${APP_JWT_SECRET:?Cần APP_JWT_SECRET (≥ 32 ký tự)}"
 export DB_TYPE DB_HOST DB_PORT DB_NAME DB_USER DB_PASS PORT APP_JWT_SECRET
 
-TIMING_TSV="out/logs/steps.tsv"     # <tên bước>\t<số giây> — nguồn cho metrics + comment PR
+TIMING_TSV="${TMPDIR:-/tmp}/codegen-steps-${DB_TYPE}.tsv"   # <tên bước>\t<số giây> — đặt NGOÀI out/
+                                # vì sao: bước 9 sinh lại out/ sẽ xoá mất số liệu các bước trước
+rm -f "$TIMING_TSV"
 CUR_STEP=""; STEP_T0=0
 
 begin() {   # $1 = tên bước: in tiêu đề, mở group log CI, bắt đầu bấm giờ
@@ -37,7 +39,6 @@ begin() {   # $1 = tên bước: in tiêu đề, mở group log CI, bắt đầu
 end() {     # ghi thời gian bước vừa xong (vì sao: đo baseline PR-16, không cần đo tay)
   local d=$(( SECONDS - STEP_T0 ))
   printf '⏱ %s — %ss\n' "$CUR_STEP" "$d"
-  mkdir -p out/logs
   printf '%s\t%s\n' "$CUR_STEP" "$d" >> "$TIMING_TSV"
   if [ "${CI:-}" = true ]; then printf '::endgroup::\n'; fi
   CUR_STEP=""

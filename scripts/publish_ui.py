@@ -82,8 +82,9 @@ def changes_section() -> list[str]:
 
 
 def timing_section() -> list[str]:
-    """Thời gian từng bước pipeline (out/logs/steps.tsv do pipeline.sh ghi)."""
-    tsv = ROOT / 'out' / 'logs' / 'steps.tsv'
+    """Thời gian từng bước pipeline (file /tmp/codegen-steps-<DB>.tsv do pipeline.sh ghi)."""
+    tsv = Path(os.environ.get('STEPS_FILE')
+               or f"{tempfile.gettempdir()}/codegen-steps-{os.environ.get('DB_TYPE', 'postgresql')}.tsv")
     if not tsv.exists():
         return []
     L = ['### ⏱️ Thời gian từng bước', '', '| Bước | Giây |', '|---|---|']
