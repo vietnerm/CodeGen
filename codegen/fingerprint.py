@@ -22,7 +22,7 @@ import subprocess
 from pathlib import Path
 
 # Đổi FORMAT hoặc G_GLOBS ⇒ state cũ (.cache/build-state.json) vô hiệu tự động.
-FORMAT = 'build-fingerprint-v1'
+FORMAT = 'build-fingerprint-v2'   # v2: loại target/ khỏi G và core_java_sha — state cũ (v1) vô hiệu
 
 # Phần nền: đổi bất kỳ file nào khớp các mẫu này ⇒ ảnh hưởng tới TOÀN BỘ chức năng.
 # Chú ý 1: _codemaps.yaml / _testdata.yaml CỐ Ý không nằm đây — chúng được soi theo lát
@@ -53,15 +53,22 @@ def _dump(obj) -> str:
 # ── G: phần nền ───────────────────────────────────────────────────────────────
 
 def _g_file(p: Path) -> bool:
-    """File nào được tính vào G: bỏ __pycache__/*.pyc.
+    """File nào được tính vào G: bỏ __pycache__/*.pyc và thư mục target/ (đầu ra mvn).
 
-    Vì sao: import codegen (khi chạy generator.py) tự tạo __pycache__ TRƯỚC khi g_hash glob;
-    .pyc nhúng mtime file nguồn, mà actions/checkout ghi mtime theo giây checkout — hai job
-    cùng một run checkout lệch nhau vài giây là G khác nhau (run 44722931898: postgresql
-    5ecb81de… khác mysql 9081a0da…). pyc không phải nguồn sinh code — loại ra, G chỉ còn
-    nội dung git, tất định giữa các job.
+    Vì sao loại __pycache__: import codegen (khi chạy generator.py) tự tạo __pycache__ TRƯỚC
+    khi g_hash glob; .pyc nhúng mtime file nguồn, mà actions/checkout ghi mtime theo giây
+    checkout — hai job cùng một run checkout lệch nhau vài giây là G khác nhau (run
+    44722931898: postgresql 5ecb81de… khác mysql 9081a0da…).
+    Vì sao loại target/: mvn ở bước 5 ghi core/java/target/** SAU khi ghash đã tính G cho key
+    cache — G đo ở bước 8 lệch với G của key (run 44724125899: key aca2ef7e… nhưng state ghi
+    62b16979…/e467f8c7… mỗi job một giá trị). jar/class nhúng timestamp bản dựng, không phải
+    nguồn sinh code. Khớp chính xác thành phần đường 'target' (số ít) — thư mục 'targets'
+    (số nhiều, chứa template của generator) không bị ảnh hưởng.
     """
-    return p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'
+    return (p.is_file()
+            and '__pycache__' not in p.parts
+            and 'target' not in p.parts
+            and p.suffix != '.pyc')
 
 
 def g_hash(root: Path) -> str:
@@ -270,7 +277,7 @@ def skip_build(root: Path) -> tuple[bool, str]:
     if not (root / 'out' / 'app').exists():
         return False, 'out/app chưa được sinh (pipeline luôn sinh trước khi tới bước mvn)'
     cur_app = tree_sha(root / 'out' / 'app', exclude=('target',))
-    cur_core = tree_sha(root / 'core' / 'java')
+    cur_core = tree_sha(root / 'core' / 'java', exclude=('target',))   # target = đầu ra mvn, có timestamp
     if cur_app == st.get('out_app_sha') and cur_core == st.get('core_java_sha'):
         return True, 'nguồn Java sinh ra + core/java y hệt lần xanh trước — dùng lại jar, bỏ mvn'
     return False, 'out/app hoặc core/java đổi so với lần xanh trước'
@@ -285,7 +292,10 @@ def save_state(root: Path, ir=None) -> dict:
         'G': fp['G'],
         'fp': {k: v for k, v in fp.items() if not k.startswith('_') and k != 'G'},
         'out_app_sha': tree_sha(root / 'out' / 'app', exclude=('target',)),
-        'core_java_sha': tree_sha(root / 'core' / 'java'),
+        'core_java_sha': tree_sha(root / 'core' / 'java', exclude=('target',)),
+        # vì sao exclude target: CI chạy mvn TRƯỚC khi ghi state — target chứa jar/class nhúng
+        # timestamp bản dựng; giữ vào thì run sau (target chưa có/đổi timestamp) luôn bị coi là
+        # "đổi nguồn" và mvn lại vô ích (lỗi thật run 44725364104: cache đã restore mà vẫn mvn),
     }
     p = state_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)

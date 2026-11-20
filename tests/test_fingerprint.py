@@ -129,7 +129,7 @@ def test_state_quyet_dinh_skip_build(tmp_path):
     (work / 'out' / 'app').mkdir(parents=True)
     st = fingerprint.load_state(work)
     st['out_app_sha'] = fingerprint.tree_sha(work / 'out' / 'app', exclude=('target',))
-    st['core_java_sha'] = fingerprint.tree_sha(work / 'core' / 'java')
+    st['core_java_sha'] = fingerprint.tree_sha(work / 'core' / 'java', exclude=('target',))   # khớp save_state v2
     fingerprint.state_path(work).write_text(json.dumps(st), encoding='utf-8')
     do, why = fingerprint.skip_build(work)
     assert do and 'y hệt lần xanh' in why
@@ -153,3 +153,61 @@ def test_g_bo_qua_pycache_duoc_tao_khi_chay(tmp_path):
     # job kia checkout lệch vài giây ⇒ pyc "khác" (mtime nhúng trong header khác)
     (py / 'fingerprint.cpython-312.pyc').write_bytes(b'pyc cua job mysql - khac byte')
     assert fingerprint.g_hash(work) == g0
+
+
+def test_g_bo_qua_thu_muc_target_mvn(tmp_path):
+    """mvn ghi core/java/target/** SAU khi ghash tính G cho key cache (run 44724125899:
+    key aca2ef7e… nhưng state ghi 62b16979…/e467f8c7… mỗi job một giá trị). target chứa
+    jar/class nhúng timestamp bản dựng — G phải bỏ qua, thư mục 'targets' (template) thì giữ."""
+    work = fresh_copy(tmp_path)
+    g0 = fingerprint.g_hash(work)
+    tgt = work / 'core' / 'java' / 'target' / 'classes'
+    tgt.mkdir(parents=True, exist_ok=True)   # bản copy có thể đã chứa target/ từ mvn cũ
+    (tgt / 'Core.class').write_bytes(b'class job A')
+    (work / 'core' / 'java' / 'target' / 'devhub-core.jar').write_bytes(b'jar timestamp A')
+    assert fingerprint.g_hash(work) == g0
+    # job/lần dựng khác: mvn ghi lại target với timestamp khác
+    (tgt / 'Core.class').write_bytes(b'class job B - khac')
+    assert fingerprint.g_hash(work) == g0
+    # thư mục 'targets' (template generator) vẫn phải được soi — đổi file trong đó là G đổi
+    tpl = next(p for p in (work / 'targets').rglob('*') if p.is_file())
+    edit(work, tpl.relative_to(work).as_posix(), '\n', '\n<!-- doi -->\n')
+    assert fingerprint.g_hash(work) != g0
+
+
+def test_skip_build_khong_ke_target_mvn(tmp_path):
+    """State được ghi SAU khi mvn đã tạo core/java/target (thời điểm thật của CI); run sau
+    chưa mvn hoặc mvn ra timestamp khác — nếu target bị tính vào sha thì luôn mvn lại vô ích
+    (lỗi thật run 44725364104: cache đã restore mà vẫn mvn)."""
+    work = fresh_copy(tmp_path)
+    # giả lập run A: mvn đã chạy (target có file timestamp), sinh out/app, ghi state
+    tgt = work / 'core' / 'java' / 'target' / 'classes'
+    tgt.mkdir(parents=True, exist_ok=True)   # bản copy có thể đã chứa target/ từ mvn cũ
+    (tgt / 'Core.class').write_bytes(b'class run A')
+    fingerprint.save_state(work)
+    (work / '.cache' / 'app.jar').write_bytes(b'jar run A')
+    (work / 'out' / 'app').mkdir(parents=True)
+    st = fingerprint.load_state(work)
+    st['out_app_sha'] = fingerprint.tree_sha(work / 'out' / 'app', exclude=('target',))
+    fingerprint.state_path(work).write_text(json.dumps(st), encoding='utf-8')
+    # run B: target mvn ra NỘI DUNG KHÁC (timestamp mới) — nguồn không đổi vẫn phải skip
+    (tgt / 'Core.class').write_bytes(b'class run B - timestamp khac')
+    do, why = fingerprint.skip_build(work)
+    assert do, why
+    # nhưng nguồn core/java thật sự đổi thì phải mvn lại
+    java = next(p for p in (work / 'core' / 'java' / 'src').rglob('*') if p.is_file())
+    edit(work, java.relative_to(work).as_posix(), '\n', '\n// doi that\n')
+    do, _ = fingerprint.skip_build(work)
+    assert not do
+
+
+def test_state_v1_cu_bat_le(tmp_path):
+    """Đổi FORMAT ⇒ state cũ vô hiệu (skip_build phải từ chối, không tin state sai luật)."""
+    work = fresh_copy(tmp_path)
+    fingerprint.save_state(work)
+    (work / '.cache' / 'app.jar').write_bytes(b'jar')
+    st = json.loads(fingerprint.state_path(work).read_text(encoding='utf-8'))
+    st['format'] = 'build-fingerprint-v1'
+    fingerprint.state_path(work).write_text(json.dumps(st), encoding='utf-8')
+    do, why = fingerprint.skip_build(work)
+    assert not do and 'build-state' in why
