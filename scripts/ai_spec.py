@@ -93,6 +93,15 @@ def generate(fid, request, parent='', log=print):
     if rep.errors:
         log("✗ spec hiện tại đang lỗi — sửa trước:\n" + '\n'.join(rep.errors))
         return False, dest, None
+    menus = {f['id']: f for f in ir['functions']}
+    if parent and parent not in menus:
+        log(f"✗ chức năng cha {parent} không tồn tại. Nút menu đang có: "
+            + ', '.join(f"{f['id']} ({f['name']})" for f in menus.values() if f['type'] == 'MENU')
+            + f". Module mới ({fid[:4]}) cần kiến trúc sư tạo spec/{sys_}/{sub}/_menu.yaml trước.")
+        return False, dest, None
+    if parent and parent[:4] != module:
+        log(f"✗ chức năng cha {parent} thuộc module khác {module} — mã chức năng và cha phải cùng module")
+        return False, dest, None
     SCHEMA = ai.dynamic_schema(ir, BASE_SCHEMA)
     ctx = ai.context(ir, request + ' ' + parent)
     schema_name = next((yaml.safe_load(p.read_text(encoding='utf-8')).get('schema')
