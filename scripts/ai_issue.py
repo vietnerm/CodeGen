@@ -98,6 +98,19 @@ def md_impact(imp):
     return '\n'.join(L)
 
 
+def md_mapping(rows):
+    """T4 — bảng ý trong issue ↔ thứ sinh ra; ý không khớp ghi ⚠️ chưa xử lý. Tất định (ai.mapping)."""
+    if not rows:
+        return ''
+    L = ['### Bảng ý trong issue ↔ thứ sinh ra', '',
+         '| Ý trong issue | Trường/hook/quan hệ tương ứng |', '|---|---|']
+    for r in rows:
+        m = '<br>'.join(r['matches']) if r['matches'] else '⚠️ **chưa xử lý**'
+        L.append(f"| {r['sentence'].replace('|', '\\|')} | {m} |")
+    L.append('')
+    return '\n'.join(L)
+
+
 def output(**kw):
     gh = os.environ.get('GITHUB_OUTPUT')
     for k, v in kw.items():
@@ -198,6 +211,7 @@ def main():
             new_ir, _ = model.build_ir(ROOT / 'spec')
             imp = ai.impact(new_ir, fid)
             body += ['### Hook nghiệp vụ (nếu issue nêu luật)', hook_note, '', md_impact(imp), '',
+                     md_mapping(ai.mapping(new_ir, f"{issue['title']} {text}", fid)),
                      '_Pipeline đầy đủ (sinh code, guard, build, chạy app, test HTTP + test hook) đang chạy — '
                      'đạt thì PR sẽ được mở và liên kết ở đây._']
         else:
@@ -208,13 +222,40 @@ def main():
                branch=f"ai/issue-{issue['number']}-{fid}")
         return
 
-    # Sửa / lỗi / hỏi: phân tích từ IR, người (hoặc agent lớn) xử lý
-    body = ['🤖 **Phân tích tự động** — yêu cầu sửa/lỗi không giao cho AI nhỏ; đây là bản đồ ảnh hưởng để người/agent lớn xử lý.', '']
+    # Sửa / lỗi: AI trích PATCH NHỎ áp vào spec (T3) — chỉ add/edit/remove field + add_lookup,
+    # cấm đổi pk / xoá entity / đụng _core.yaml; không áp được thì về phân tích như cũ cho người xử lý.
     targets = [x for x in RE_FID.findall(f"{issue['title']} {text} {fid}") if x in existing] or \
               [e['function'] for e in ctx['entities'][:2] if e['function']]
+    is_change = ('sửa' in kind or 'change' in kind or 'lỗi' in kind or 'bug' in kind) and bool(targets)
+    if is_change:
+        t0 = next(iter(dict.fromkeys(targets)))
+        try:
+            import ai_change
+            clogs = []
+            cok, dest, changes, fails = ai_change.apply(t0, text or issue['title'], log=clogs.append)
+        except Exception as e:
+            cok, changes, fails = False, [], [f'ai_change lỗi hạ tầng: {e}']
+        if cok:
+            new_ir, _ = model.build_ir(ROOT / 'spec')
+            imp = ai.impact(new_ir, t0)
+            body = [f"🤖 **Sửa `{t0}` theo issue** — áp {len(changes)} thay đổi nhỏ vào `spec/…/{t0}.yaml` "
+                    f"(giữ comment, không đụng pk/entity/_core)", '',
+                    '### Thay đổi', *[f"- {c}" for c in changes], '']
+            if fails:
+                body += ['### Lỗi lần thử (đã sửa qua các vòng)', '```', '\n'.join(fails)[-1500:], '```', '']
+            body += [md_impact(imp), '', md_mapping(ai.mapping(new_ir, f"{issue['title']} {text}", t0)),
+                     '_Pipeline đầy đủ đang chạy — đạt thì PR sẽ được mở và liên kết ở đây._']
+            (OUT / 'comment.md').write_text('\n'.join(body), encoding='utf-8')
+            output(action='spec', mode='change', ok='true', fid=t0, branch=f"ai/issue-{issue['number']}-{t0}-change")
+            return
+        body = ['🤖 **Không áp được patch nhỏ cho yêu cầu sửa/lỗi này** — về bản đồ ảnh hưởng cho người/agent lớn.', '',
+                '### Log lần thử', '```', '\n'.join(fails)[-2000:] or '(không có)', '```', '']
+    else:
+        body = ['🤖 **Phân tích tự động** — yêu cầu sửa/lỗi/hỏi: đây là bản đồ ảnh hưởng để người/agent lớn xử lý.', '']
     for t in dict.fromkeys(targets):
         body += [md_impact(ai.impact(ir, t)), '']
     body += ['### Bảng liên quan theo mô tả', md_context(ctx), '',
+             md_mapping(ai.mapping(ir, f"{issue['title']} {text}", targets[0] if targets else None)),
              'Gợi ý: sửa `spec/…/<FID>.yaml` (trường, ràng buộc, quan hệ) hoặc hook `custom/…/<FID>_hookImpl.java`; '
              'pipeline sẽ sinh lại code, tài liệu, test cho mọi chức năng bị ảnh hưởng.']
     (OUT / 'comment.md').write_text('\n'.join(body), encoding='utf-8')

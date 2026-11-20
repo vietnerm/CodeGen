@@ -89,6 +89,63 @@ def dynamic_schema(ir: dict, base: dict) -> dict:
     return s
 
 
+def mapping(ir: dict, text: str, fid: str | None = None) -> list[dict]:
+    """T4 — bảng "ý trong issue ↔ thứ sinh ra": MỖI câu của issue khớp tới field/hook/quan hệ/codemap
+    của chức năng (fid chỉ định hoặc entity trong ngữ cảnh). Tất định (tokens, bỏ dấu) — KHÔNG cần model.
+    Ý không khớp mục nào sẽ được comment ghi '⚠️ chưa xử lý'."""
+    ents = {e['id']: e for e in ir['entities']}
+    fns = {f['id']: f for f in ir['functions']}
+    fn = fns.get(fid) if fid else None
+    ent = ents.get(fn['entity']) if fn and fn['entity'] else None
+    cands: list[tuple[int, str, set]] = []      # (trọng số, mô tả, tokens)
+    if ent:
+        for f in ent['api_fields']:
+            if f['from_profile']:
+                continue
+            cands.append((2, f"trường `{f['name']}` ({f['label']})",
+                          tokens(f"{f['name']} {f['label']}") | {f['name']}))
+        for h in fn['hooks']:
+            cands.append((3, f"hook `{h['name']}` ({h.get('description')})",
+                          tokens(f"{h['name']} {h.get('description')} {h.get('rule') or ''}") | {h['name']}))
+        for r in fn['refs']:
+            pf = fns.get(r['parent_function'])
+            cands.append((2, f"quan hệ `{','.join(r['cols'])}` → {r['parent_function']}"
+                             f" ({pf['name'] if pf else r['parent']})",
+                          tokens(f"{r['slug']} {pf['name'] if pf else ''} {' '.join(r['cols'])}")))
+        for g in ir['codemaps']:
+            if any(f['codemap'] == g['group'] for f in ent['fields']):
+                cands.append((1, f"codemap `{g['group']}` ({g['name']})", tokens(f"{g['group']} {g['name']}")))
+    elif fn and not ent:
+        cands.append((3, f"nhóm menu `{fn['id']}` ({fn['name']})", tokens(f"{fn['id']} {fn['name']}")))
+    else:                                       # không chỉ định fid: quét mọi chức năng CRUD
+        for f in ir['functions']:
+            if not f['entity']:
+                continue
+            for fld in ents[f['entity']]['api_fields']:
+                if not fld['from_profile']:
+                    cands.append((2, f"trường `{f['id']}.{fld['name']}` ({fld['label']})",
+                                  tokens(f"{fld['name']} {fld['label']} {f['name']}") | {fld['name']}))
+
+    out = []
+    for sen in re.split(r'[.!?\n;]+', str(text or '')):
+        sen = sen.strip()
+        want = tokens(sen)
+        if len(want) < 1 or len(sen) < 6:
+            continue
+        hits = sorted(((w + (3 if c.lower() in norm(sen) else 0), desc)
+                       for w, desc, tw in cands if len(want & tw) for c in tw if c in want),
+                      key=lambda x: -x[0])
+        seen, matches = set(), []
+        for _, desc in hits:
+            if desc not in seen:
+                seen.add(desc)
+                matches.append(desc)
+            if len(matches) >= 3:
+                break
+        out.append({'sentence': sen, 'matches': matches})
+    return out
+
+
 def impact(ir: dict, fid: str) -> dict:
     fn = next((f for f in ir['functions'] if f['id'] == fid), None)
     if not fn:

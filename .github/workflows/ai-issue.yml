@@ -71,7 +71,7 @@ jobs:
           cache: maven
 
       - name: Cài thư viện
-        run: pip install -r requirements.txt -r requirements-ci.txt "$(grep -i '^huggingface-hub' requirements-ai.txt)"
+        run: pip install -r requirements.txt -r requirements-ci.txt "$(grep -i '^huggingface-hub' requirements-ai.txt)" "$(grep -i '^ruamel.yaml' requirements-ai.txt)"
 
       - name: Cài trình duyệt cho test giao diện
         run: python -m playwright install --with-deps chromium
@@ -158,15 +158,20 @@ jobs:
           BRANCH: ${{ steps.ai.outputs.branch }}
         run: |
           git push -f origin "$BRANCH"
+          if [ "${{ steps.ai.outputs.mode }}" = "change" ]; then
+            TITLE="spec($FID): AI sửa theo issue #$ISSUE"
+          else
+            TITLE="spec($FID): AI tạo từ issue #$ISSUE"
+          fi
           { echo "Closes #$ISSUE"; echo; cat out/ai/comment.md | sed '$d'; echo;
             echo "✅ Đã đạt trong workflow: JSON schema động + validate, guard chế độ bot, pipeline đầy đủ"
             echo "(sinh code, build, chạy app, test HTTP trên PostgreSQL). Run: $RUN_URL"; } > pr-body.md
           URL=$(gh pr list --head "$BRANCH" --json url --jq '.[0].url')
           if [ -z "$URL" ]; then
             URL=$(gh pr create --base "${{ github.event.repository.default_branch }}" --head "$BRANCH" \
-                  --title "spec($FID): AI tạo từ issue #$ISSUE" --body-file pr-body.md)
+                  --title "$TITLE" --body-file pr-body.md)
           else
-            gh pr edit "$URL" --body-file pr-body.md
+            gh pr edit "$URL" --title "$TITLE" --body-file pr-body.md
           fi
           echo "PR_URL=$URL" >> "$GITHUB_ENV"
           gh issue comment "$ISSUE" --body "🤖 Pipeline đạt — PR: $URL (ảnh test giao diện ở comment trong PR)"
