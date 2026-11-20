@@ -43,5 +43,5 @@ Cùng một pipeline chạy 2 lần liên tiếp, không sửa gì giữa hai l�
 
 | Môi trường | mvn thật (s) | bỏ qua mvn (s) | Ghi chú |
 |---|---|---|---|
-| CI ubuntu-latest · PostgreSQL | 13 | _(chờ run có cache)_ | run 44721884152 · tổng 10 bước ≈ 38s |
-| CI ubuntu-latest · MySQL | 14 | _(chờ run có cache)_ | run 44721884152 · tổng 8 bước ≈ 33s (bước 9 chỉ chạy PostgreSQL) |
+| CI ubuntu-latest · PostgreSQL | 13 | _(chờ run có .cache)_ | run 44724125899 · G tất định sau commit 48d9242 |
+| CI ubuntu-latest · MySQL | 10 | _(chờ run có .cache)_ | run 44724125899 · sai lệch 3–4s giữa các run là bình thường |
